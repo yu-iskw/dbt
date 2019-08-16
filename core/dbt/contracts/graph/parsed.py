@@ -340,6 +340,13 @@ PARSED_NODE_CONTRACT = deep_merge(
                     'In seeds, the path to the source file used during build.'
                 ),
             },
+            'query_header': {
+                'type': 'string',
+                'description': (
+                    'A header string to prepend to queries executed in the '
+                    'context of this node'
+                )
+            }
         },
         'required': ['empty', 'tags', 'alias'],
     }
@@ -447,6 +454,14 @@ class ParsedNode(APIObject):
     @config.setter
     def config(self, value):
         self._contents['config'] = value
+
+    @property
+    def query_header(self):
+        return self._contents['query_header']
+
+    @alias.setter
+    def query_header(self, value):
+        self._contents['query_header'] = value
 
 
 SNAPSHOT_CONFIG_CONTRACT = {

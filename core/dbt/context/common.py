@@ -14,6 +14,7 @@ import dbt.flags
 import dbt.tracking
 import dbt.writer
 import dbt.utils
+import dbt.version
 
 from dbt.logger import GLOBAL_LOGGER as logger  # noqa
 
@@ -22,6 +23,7 @@ from dbt.logger import GLOBAL_LOGGER as logger  # noqa
 # approaches which will extend well to potentially many modules
 import pytz
 import datetime
+import base64
 
 
 class RelationProxy(object):
@@ -352,10 +354,22 @@ def get_datetime_module_context():
     }
 
 
+def get_base64_module_context():
+    context_exports = [
+        'b64encode',
+        'b64decode',
+    ]
+
+    return {
+        name: getattr(base64, name) for name in context_exports
+    }
+
+
 def get_context_modules():
     return {
         'pytz': get_pytz_module_context(),
         'datetime': get_datetime_module_context(),
+        'base64': get_base64_module_context()
     }
 
 
@@ -420,7 +434,8 @@ def generate_base(model, model_dict, config, manifest, source_config,
         "fromjson": fromjson,
         "tojson": tojson,
         "target": target,
-        "try_or_compiler_error": try_or_compiler_error(model)
+        "try_or_compiler_error": try_or_compiler_error(model),
+        "dbt_version": dbt.version.__version__,
     })
     if os.environ.get('DBT_MACRO_DEBUGGING'):
         context['debug'] = _debug_here

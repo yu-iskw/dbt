@@ -1,6 +1,12 @@
+
+{% macro preprocess_statement(model, sql) -%}
+{{ model.query_header}}
+{{ sql }}
+{%- endmacro %}
+
 {% macro statement(name=None, fetch_result=False, auto_begin=True) -%}
   {%- if execute: -%}
-    {%- set sql = render(caller()) -%}
+    {%- set sql = preprocess_statement(model, render(caller())) -%}
 
     {%- if name == 'main' -%}
       {{ log('Writing runtime SQL for node "{}"'.format(model['unique_id'])) }}

@@ -60,6 +60,7 @@ class MacrosKnownParser(BaseParser):
         self.macro_manifest = macro_manifest
         self._get_schema_func = None
         self._get_alias_func = None
+        self._get_query_header_func = None
 
     def get_schema_func(self):
         """The get_schema function is set by a few different things:
@@ -136,6 +137,42 @@ class MacrosKnownParser(BaseParser):
 
         self._get_alias_func = get_alias
         return self._get_alias_func
+
+    def get_query_header_func(self):
+        """The get_query_header function is set by a few different things:
+            - if there is a 'generate_query_header' macro in the root project,
+                it will be used.
+            - if that does not exist but there is a 'generate_query_header'
+                macro in the 'dbt' internal project, that will be used
+            - if neither of those exist (unit tests?), a function that returns
+                and empty string is used
+        """
+        if self._get_query_header_func is not None:
+            return self._get_query_header_func
+
+        get_query_header_macro = self.macro_manifest.find_macro_by_name(
+            'generate_query_header',
+            self.root_project_config.project_name
+        )
+        if get_query_header_macro is None:
+            get_query_header_macro = self.macro_manifest.find_macro_by_name(
+                'generate_query_header',
+                GLOBAL_PROJECT_NAME
+            )
+
+        # the generate_query_header macro might not exist
+        if get_query_header_macro is None:
+            def get_query_header(node):
+                return ''
+        else:
+            root_context = dbt.context.parser.generate_macro(
+                get_query_header_macro, self.root_project_config,
+                self.macro_manifest
+            )
+            get_query_header = get_query_header_macro.generator(root_context)
+
+        self._get_query_header_func = get_query_header
+        return self._get_query_header_func
 
     def _build_intermediate_node_dict(self, config, node_dict, node_path,
                                       package_project_config, tags, fqn,
@@ -239,6 +276,9 @@ class MacrosKnownParser(BaseParser):
         config_dict = parsed_node.get('config', {})
         config_dict.update(config.config)
         parsed_node.config = config_dict
+
+        get_query_header = self.get_query_header_func()
+        parsed_node.query_header = get_query_header(parsed_node).strip()
 
         for hook_type in dbt.hooks.ModelHookType.Both:
             parsed_node.config[hook_type] = dbt.hooks.get_hooks(parsed_node,
