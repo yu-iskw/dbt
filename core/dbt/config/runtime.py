@@ -30,7 +30,8 @@ class RuntimeConfig(Project, Profile):
                  docs_paths, target_path, snapshot_paths, clean_targets,
                  log_path, modules_path, quoting, models, on_run_start,
                  on_run_end, archive, seeds, dbt_version, profile_name,
-                 target_name, config, threads, credentials, packages, args):
+                 target_name, config, threads, credentials, packages,
+                 query_header, args):
         # 'vars'
         self.args = args
         self.cli_vars = parse_cli_vars(getattr(args, 'vars', '{}'))
@@ -59,7 +60,8 @@ class RuntimeConfig(Project, Profile):
             archive=archive,
             seeds=seeds,
             dbt_version=dbt_version,
-            packages=packages
+            packages=packages,
+            query_header=query_header
         )
         # 'profile'
         Profile.__init__(
@@ -115,12 +117,13 @@ class RuntimeConfig(Project, Profile):
             seeds=project.seeds,
             dbt_version=project.dbt_version,
             packages=project.packages,
+            query_header=project.query_header,
             profile_name=profile.profile_name,
             target_name=profile.target_name,
             config=profile.config,
             threads=profile.threads,
             credentials=profile.credentials,
-            args=args
+            args=args,
         )
 
     def new_project(self, project_root):

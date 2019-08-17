@@ -21,7 +21,7 @@ class ConfigRenderer(object):
 
         first = keypath[0]
         # run hooks
-        if first in {'on-run-start', 'on-run-end'}:
+        if first in {'on-run-start', 'on-run-end', 'query_header'}:
             return True
         # models have two things to avoid
         if first in {'seeds', 'models'}:

@@ -146,7 +146,7 @@ class Project(object):
                  analysis_paths, docs_paths, target_path, snapshot_paths,
                  clean_targets, log_path, modules_path, quoting, models,
                  on_run_start, on_run_end, archive, seeds, dbt_version,
-                 packages):
+                 packages, query_header):
         self.project_name = project_name
         self.version = version
         self.project_root = project_root
@@ -170,6 +170,7 @@ class Project(object):
         self.seeds = seeds
         self.dbt_version = dbt_version
         self.packages = packages
+        self.query_header = query_header
 
     @staticmethod
     def _preprocess(project_dict):
@@ -248,6 +249,7 @@ class Project(object):
         modules_path = project_dict.get('modules-path', 'dbt_modules')
         # in the default case we'll populate this once we know the adapter type
         quoting = project_dict.get('quoting', {})
+        query_header = project_dict.get('query_header')
 
         models = project_dict.get('models', {})
         on_run_start = project_dict.get('on-run-start', [])
@@ -286,7 +288,8 @@ class Project(object):
             archive=archive,
             seeds=seeds,
             dbt_version=dbt_version,
-            packages=packages
+            packages=packages,
+            query_header=query_header,
         )
         # sanity check - this means an internal issue
         project.validate()
@@ -335,6 +338,7 @@ class Project(object):
             'require-dbt-version': [
                 v.to_version_string() for v in self.dbt_version
             ],
+            'query_header': self.query_header,
         })
         if with_packages:
             result.update(self.packages.serialize())

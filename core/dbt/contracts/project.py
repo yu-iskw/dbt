@@ -126,6 +126,9 @@ PROJECT_CONTRACT = {
                 }
             },
         },
+        'query_header': {
+            'type': ['null', 'string'],
+        },
         'models': {
             'type': 'object',
             'additionalProperties': True,
