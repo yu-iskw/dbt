@@ -6,7 +6,7 @@ import dbt.clients.jinja
 
 from dbt.contracts.graph.unparsed import UNPARSED_NODE_CONTRACT, \
     UNPARSED_MACRO_CONTRACT, UNPARSED_DOCUMENTATION_FILE_CONTRACT, \
-    UNPARSED_BASE_CONTRACT, TIME_CONTRACT
+    UNPARSED_BASE_CONTRACT, TIME_CONTRACT, UNPARSED_NODE_DOCS_DATA_CONTRACT
 
 from dbt.logger import GLOBAL_LOGGER as logger  # noqa
 
@@ -308,6 +308,7 @@ PARSED_NODE_CONTRACT = deep_merge(
     HAS_CONFIG_CONTRACT,
     COLUMN_TEST_CONTRACT,
     HAS_RELATION_METADATA_CONTRACT,
+    UNPARSED_NODE_DOCS_DATA_CONTRACT,
     {
         'properties': {
             'alias': {
@@ -401,6 +402,7 @@ class ParsedNode(APIObject):
             'description': patch.description,
             'columns': patch.columns,
             'docrefs': patch.docrefs,
+            'docs': patch.docs,
         })
         # patches always trigger re-validation
         self.validate()
@@ -554,10 +556,13 @@ PARSED_NODE_PATCH_CONTRACT = {
         'docrefs': {
             'type': 'array',
             'items': DOCREF_CONTRACT,
+        },
+        'docs': {
+            'type': 'object'
         }
     },
     'required': [
-        'name', 'original_file_path', 'description', 'columns', 'docrefs'
+        'name', 'original_file_path', 'description', 'columns', 'docrefs', 'docs'
     ],
 }
 
