@@ -459,7 +459,7 @@ class ParsedNode(APIObject):
     def query_header(self):
         return self._contents['query_header']
 
-    @alias.setter
+    @query_header.setter
     def query_header(self, value):
         self._contents['query_header'] = value
 
