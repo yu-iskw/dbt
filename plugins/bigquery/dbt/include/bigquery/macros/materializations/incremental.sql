@@ -30,17 +30,17 @@
   {% else %}
      {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
      
-     {# If partitioned, get the earliest partition with updates #}
+     {#-- if partitioned, get the range of partition values to be updated --#}
      {% if partition_by %}
          {%- call statement('pro_tmp', fetch_result = True) -%}
             {{ create_table_as(True, tmp_relation, sql) }}
          {%- endcall -%}
 
-         {% call statement('get_min_source_partition', fetch_result = True) %}
+         {% call statement('get_partition_range', fetch_result = True) %}
             select min({{partition_by}}), max({{partition_by}}) from {{tmp_relation}}
          {% endcall %}
          
-         {% set partition_range = load_result('get_min_source_partition').data[0]|list %}
+         {% set partition_range = load_result('get_partition_range').data[0]|list %}
          {% set partition_min, partition_max = partition_range[0]|string, partition_range[1]|string %}
       {% endif %}
 
