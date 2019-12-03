@@ -30,6 +30,8 @@
   {% else %}
      {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
      
+     {%- set dest_partition = none -%}
+     
      {#-- if partitioned, get the range of partition values to be updated --#}
      {% if partition_by %}
          {%- call statement('pro_tmp', fetch_result = True) -%}
@@ -42,6 +44,12 @@
          
          {% set partition_range = load_result('get_partition_range').data[0]|list %}
          {% set partition_min, partition_max = partition_range[0]|string, partition_range[1]|string %}
+         
+         {%- set dest_partition = {
+            'name': partition_by|lower|replace('date(','')|replace(')',''), 
+            'min': partition_min, 
+            'max': partition_max
+            } -%}
       {% endif %}
 
      {#-- wrap sql in parens to make it a subquery --#}
@@ -50,12 +58,6 @@
          {{ sql }}
        )
      {%- endset -%}
-     
-     {%- set dest_partition = {
-        'name': partition_by|lower|replace('date(','')|replace(')',''), 
-        'min': partition_min, 
-        'max': partition_max
-        } -%}
      
      {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns, dest_partition) %}
   {% endif %}
