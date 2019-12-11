@@ -23,11 +23,8 @@
 {% macro common_get_merge_sql(target, source, unique_key, dest_columns, dest_partition) -%}
     {%- set dest_cols_csv =  get_quoted_csv(dest_columns | map(attribute="name")) -%}
 
-    merge into {{ target }} as DBT_INTERNAL_DEST
-    using {{ source }} as DBT_INTERNAL_SOURCE
-
     {% set conditions = [] %}
-    
+
     {% if dest_partition %}
         {% set dest_partition_filter %}
             DBT_INTERNAL_DEST.{{dest_partition.name}}
@@ -42,12 +39,15 @@
         {% endset %}
         {% do conditions.append(unique_key_match) %}
     {% endif %}
-    
-        ON {{conditions|join(' and ')}}
-    
-    {% if conditions|length == 0 %}
-        FALSE
-    {% endif %}
+
+    merge into {{ target }} as DBT_INTERNAL_DEST
+        using {{ source }} as DBT_INTERNAL_SOURCE
+        on
+        {% if conditions|length == 0 %}
+            FALSE
+        {% else %}
+            {{ conditions | join(' and ') }}
+        {% endif %}
 
     {% if unique_key %}
     when matched then update set
