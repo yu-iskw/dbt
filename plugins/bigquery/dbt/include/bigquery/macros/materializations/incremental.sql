@@ -34,15 +34,13 @@
      
      {#-- if partitioned, get the range of partition values to be updated --#}
      {% if partition_by %}
-         {%- call statement('pro_tmp', fetch_result = True) -%}
-            {{ create_table_as(True, tmp_relation, sql) }}
-         {%- endcall -%}
+         {% do run_query(create_table_as(True, tmp_relation, sql)) %}
 
-         {% call statement('get_partition_range', fetch_result = True) %}
+         {% set get_partition_range %}
             select min({{partition_by}}), max({{partition_by}}) from {{tmp_relation}}
-         {% endcall %}
+         {% endset %}
          
-         {% set partition_range = load_result('get_partition_range').data[0]|list %}
+         {% set partition_range = run_query(get_partition_range)[0] %}
          {% set partition_min, partition_max = partition_range[0]|string, partition_range[1]|string %}
          
          {%- set dest_partition = {
