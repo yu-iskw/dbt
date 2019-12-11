@@ -47,25 +47,32 @@
 
 {% macro snowflake__get_columns_in_relation(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
-      select
-          column_name,
-          data_type,
-          character_maximum_length,
-          numeric_precision,
-          numeric_scale
-
-      from
-      {{ relation.information_schema('columns') }}
-
-      where table_name ilike '{{ relation.identifier }}'
-        {% if relation.schema %}
-        and table_schema ilike '{{ relation.schema }}'
-        {% endif %}
-        {% if relation.database %}
-        and table_catalog ilike '{{ relation.database }}'
-        {% endif %}
-      order by ordinal_position
-
+    show columns in {{ relation }};
+    select
+        column_name,
+        data_type,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
+    from (
+        select
+            "column_name" as column_name,
+            parse_json("data_type") as ttype, -- ignored, used as a lateral alias
+            ttype:type::string as data_type, -- TODO
+            case
+                when ttype:type::string = 'TEXT' then ttype:length::int
+                else null::int
+            end as character_maximum_length,
+            case
+                when ttype:type::string = 'FIXED' then ttype:precision::int
+                else null::int
+            end as numeric_precision,
+            case
+                when ttype:type::string = 'FIXED' then ttype:scale::int
+                else null::int
+            end as numeric_scale
+        from table(result_scan(last_query_id()))
+    );
   {% endcall %}
 
   {% set table = load_result('get_columns_in_relation').table %}
@@ -76,19 +83,16 @@
 
 {% macro snowflake__list_relations_without_caching(information_schema, schema) %}
   {% call statement('list_relations_without_caching', fetch_result=True) -%}
+    show terse objects in {{ information_schema.database }}.{{ schema }};
     select
-      table_catalog as database,
-      table_name as name,
-      table_schema as schema,
-      case when table_type = 'BASE TABLE' then 'table'
-           when table_type = 'VIEW' then 'view'
-           when table_type = 'MATERIALIZED VIEW' then 'materializedview'
-           when table_type = 'EXTERNAL TABLE' then 'external'
-           else table_type
-      end as table_type
-    from {{ information_schema }}.tables
-    where table_schema ilike '{{ schema }}'
-      and table_catalog ilike '{{ information_schema.database.lower() }}'
+        "database_name" as database_name,
+        "name" as name,
+        "schema_name" as schema,
+        case when "kind" = 'TABLE' then 'table'
+             when "kind" = 'VIEW' then 'view'
+             else "kind"
+        end as table_type
+    from table(result_scan(last_query_id()));
   {% endcall %}
   {{ return(load_result('list_relations_without_caching').table) }}
 {% endmacro %}
@@ -96,13 +100,21 @@
 
 {% macro snowflake__check_schema_exists(information_schema, schema) -%}
   {% call statement('check_schema_exists', fetch_result=True) -%}
-        select count(*)
-        from {{ information_schema }}.schemata
-        where upper(schema_name) = upper('{{ schema }}')
-            and upper(catalog_name) = upper('{{ information_schema.database }}')
+    show schemas like '{{ schema }}' in database {{ information_schema.database }};
+    select count(*)
+    from table(result_scan(last_query_id()));
   {%- endcall %}
   {{ return(load_result('check_schema_exists').table) }}
 {%- endmacro %}
+
+{% macro snowflake__list_schemas(database) -%}
+  {% set sql %}
+    show schemas in database {{ database }};
+    select distinct "name" as schema_name
+    from table(result_scan(last_query_id()));
+  {% endset %}
+  {{ return(run_query(sql)) }}
+{% endmacro %}
 
 {% macro snowflake__current_timestamp() -%}
   convert_timezone('UTC', current_timestamp())
