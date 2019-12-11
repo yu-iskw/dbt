@@ -43,11 +43,18 @@
          {% set partition_range = run_query(get_partition_range)[0] %}
          {% set partition_min, partition_max = partition_range[0]|string, partition_range[1]|string %}
          
-         {%- set dest_partition = {
-            'name': partition_by|lower|replace('date(','')|replace(')',''), 
-            'min': partition_min, 
-            'max': partition_max
-            } -%}
+         {% set p = modules.re.compile(
+             '(?:[ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?', 
+             modules.re.IGNORECASE) %}
+         {% set partition_colname = p.match(partition_by).group(1) %}
+         
+         {% if partition_min|lower != 'null' and partition_max|lower != 'null' %}
+            {%- set dest_partition = {
+                'name': partition_colname,
+                'min': partition_min,
+                'max': partition_max
+                } -%}
+          {% endif %}
       {% endif %}
 
      {#-- wrap sql in parens to make it a subquery --#}
