@@ -34,6 +34,12 @@
      
      {#-- if partitioned, get the range of partition values to be updated --#}
      {% if partition_by %}
+         {#-- If the temp relation exists and its partition/cluster config of the temp relation 
+         has changed, then we must drop and recreate --#}
+         {% if not adapter.is_replaceable(tmp_relation, partition_by, cluster_by) %}
+             {% do log("Hard refreshing " ~ tmp_relation ~ " because it is not replaceable") %}
+             {{ adapter.drop_relation(tmp_relation) }}
+         {% endif %}
          {% do run_query(create_table_as(True, tmp_relation, sql)) %}
 
          {% set get_partition_range %}
@@ -44,11 +50,11 @@
          {% set partition_min, partition_max = partition_range[0]|string, partition_range[1]|string %}
          
          {% set p = modules.re.compile(
-             '(?:[ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?', 
+             '([ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?', 
              modules.re.IGNORECASE) %}
          {% set m = p.match(partition_by) %}
-         {% set cast_to_date = ('date' in m.group(0)|lower) %}
-         {% set partition_colname = m.group(1) %}
+         {% set cast_to_date = ('date' in m.group(1)|lower) %}
+         {% set partition_colname = m.group(2) %}
          
          {% if partition_min|lower != 'null' and partition_max|lower != 'null' %}
             {%- set dest_partition = {
