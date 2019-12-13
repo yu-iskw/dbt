@@ -23,14 +23,23 @@
 {% macro common_get_merge_sql(target, source, unique_key, dest_columns, dest_partition) -%}
     {%- set dest_cols_csv =  get_quoted_csv(dest_columns | map(attribute="name")) -%}
 
-    {% set conditions = [] %}
+    {%- set conditions = [] -%}
 
-    {% if dest_partition %}
-        {% set dest_partition_filter %}
-            DBT_INTERNAL_DEST.{{dest_partition.name}}
-                between '{{dest_partition.min}}' and '{{dest_partition.max}}'
-        {% endset %}
-        {% do conditions.append(dest_partition_filter) %}
+    {%- if dest_partition -%}
+        {%- set partition_expression -%}
+            {%- if dest_partition.cast_to_date -%}
+                DATE(DBT_INTERNAL_DEST.{{dest_partition.name}})
+            {%- else -%}
+                DBT_INTERNAL_DEST.{{dest_partition.name}}
+            {%- endif -%}
+        {%- endset -%}
+    
+        {%- set dest_partition_filter -%}
+            {{partition_expression}} between '{{dest_partition.min}}' and '{{dest_partition.max}}'
+        {%- endset -%}
+        
+        {%- do conditions.append(dest_partition_filter) -%}
+    
     {% endif %}
 
     {% if unique_key %}

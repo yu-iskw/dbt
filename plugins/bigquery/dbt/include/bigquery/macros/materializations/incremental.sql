@@ -46,23 +46,35 @@
          {% set p = modules.re.compile(
              '(?:[ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?', 
              modules.re.IGNORECASE) %}
-         {% set partition_colname = p.match(partition_by).group(1) %}
+         {% set m = p.match(partition_by) %}
+         {% set cast_to_date = ('date' in m.group(0)|lower) %}
+         {% set partition_colname = m.group(1) %}
          
          {% if partition_min|lower != 'null' and partition_max|lower != 'null' %}
             {%- set dest_partition = {
                 'name': partition_colname,
+                'cast_to_date': cast_to_date,
                 'min': partition_min,
                 'max': partition_max
                 } -%}
           {% endif %}
+          
+          {%- set source_sql -%}
+            (
+              select * from {{tmp_relation}}
+            )
+          {%- endset -%}
+          
+      {% else %}
+      
+          {#-- wrap sql in parens to make it a subquery --#}
+          {%- set source_sql -%}
+            (
+              {{sql}}
+            )
+          {%- endset -%}
+          
       {% endif %}
-
-     {#-- wrap sql in parens to make it a subquery --#}
-     {% set source_sql -%}
-       (
-         {{ sql }}
-       )
-     {%- endset -%}
      
      {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns, dest_partition) %}
   {% endif %}
