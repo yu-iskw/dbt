@@ -1,11 +1,11 @@
 
 
-{% macro get_merge_sql(target, source, unique_key, dest_columns, dest_partition) -%}
-  {{ adapter_macro('get_merge_sql', target, source, unique_key, dest_columns, dest_partition) }}
+{% macro get_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
+  {{ adapter_macro('get_merge_sql', target, source, unique_key, dest_columns, partition_by) }}
 {%- endmacro %}
 
-{% macro get_delete_insert_merge_sql(target, source, unique_key, dest_columns) -%}
-  {{ adapter_macro('get_delete_insert_merge_sql', target, source, unique_key, dest_columns) }}
+{% macro get_delete_insert_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
+  {{ adapter_macro('get_delete_insert_merge_sql', target, source, unique_key, dest_columns, partition_by) }}
 {%- endmacro %}
 
 
@@ -19,34 +19,47 @@
     {{ return(dest_cols_csv) }}
 {% endmacro %}
 
+{% macro get_dest_partition_filter(partition_by) %}
 
-{% macro common_get_merge_sql(target, source, unique_key, dest_columns, dest_partition) -%}
+    {#-- determine whether the partition column is a timestamp or date --#}
+    {% set p = modules.re.compile(
+        '([ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?',
+        modules.re.IGNORECASE) %}
+    {% set m = p.match(partition_by) %}
+    {% set cast_to_date = ('date' in m.group(1)|lower) %}
+    {% set partition_colname = m.group(2) %}
+
+    {%- set partition_expression -%}
+        {%- if cast_to_date -%}
+            DATE(DBT_INTERNAL_DEST.{{partition_colname}})
+        {%- else -%}
+            DBT_INTERNAL_DEST.{{partition_colname}}
+        {%- endif -%}
+    {%- endset -%}
+
+    {%- set dest_partition_filter -%}
+        {{partition_expression}} between partition_min and partition_max
+    {%- endset -%}
+    
+    {% do return(dest_partition_filter) %}
+
+{% endmacro %}
+
+
+{% macro common_get_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
     {%- set dest_cols_csv =  get_quoted_csv(dest_columns | map(attribute="name")) -%}
 
     {%- set conditions = [] -%}
-
-    {%- if dest_partition -%}
-        {%- set partition_expression -%}
-            {%- if dest_partition.cast_to_date -%}
-                DATE(DBT_INTERNAL_DEST.{{dest_partition.name}})
-            {%- else -%}
-                DBT_INTERNAL_DEST.{{dest_partition.name}}
-            {%- endif -%}
-        {%- endset -%}
-    
-        {%- set dest_partition_filter -%}
-            {{partition_expression}} between '{{dest_partition.min}}' and '{{dest_partition.max}}'
-        {%- endset -%}
-        
-        {%- do conditions.append(dest_partition_filter) -%}
-    
-    {% endif %}
 
     {% if unique_key %}
         {% set unique_key_match %}
             DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }}
         {% endset %}
         {% do conditions.append(unique_key_match) %}
+    {% endif %}
+    
+    {%- if partition_by -%}
+        {%- do conditions.append(get_dest_partition_filter(partition_by)) -%}
     {% endif %}
 
     merge into {{ target }} as DBT_INTERNAL_DEST
@@ -73,7 +86,7 @@
 
 {%- endmacro %}
 
-{% macro default__get_merge_sql(target, source, unique_key, dest_columns) -%}
+{% macro default__get_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
     {% set typename = adapter.type() %}
 
     {{ exceptions.raise_compiler_error(

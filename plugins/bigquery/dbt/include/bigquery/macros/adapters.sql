@@ -33,7 +33,7 @@
   {%- if description is not none -%}
     {%- do opts.update({'description': "'" ~ description ~ "'"}) -%}
   {%- endif -%}
-  {%- if temporary -%}
+  {%- if temporary and temporary != 'scripting' -%}
     {% do opts.update({'expiration_timestamp': 'TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)'}) %}
   {%- endif -%}
   {%- if kms_key_name -%}
@@ -64,6 +64,16 @@
   {%- set sql_header = config.get('sql_header', none) -%}
 
   {{ sql_header if sql_header is not none }}
+  
+  {%- if temporary == 'scripting' -%}
+  {# "true" temp tables only possible when scripting #}
+  
+  create or replace temp table {{ relation.identifier }}
+  as (
+    {{ sql }}
+  );
+  
+  {%- else -%}
 
   create or replace table {{ relation }}
   {{ partition_by(raw_partition_by) }}
@@ -74,6 +84,9 @@
   as (
     {{ sql }}
   );
+  
+  {%- endif -%}
+  
 {%- endmacro -%}
 
 
