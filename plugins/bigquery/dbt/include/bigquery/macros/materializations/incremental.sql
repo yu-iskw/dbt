@@ -8,7 +8,7 @@
   {%- set existing_relation = load_relation(this) %}
   {%- set tmp_relation = make_temp_relation(this) %}
 
-  {%- set partition_by = config.get('partition_by', none) -%}
+  {%- set partition_by = parse_partition_by(config.get('partition_by', none)) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
   {%- set min_source_partition = none -%}
 
@@ -22,7 +22,7 @@
       {% set build_sql = create_table_as(False, target_relation, sql) %}
   {% elif full_refresh_mode %}
       {#-- If the partition/cluster config has changed, then we must drop and recreate --#}
-      {% if not adapter.is_replaceable(existing_relation, partition_by, cluster_by) %}
+      {% if not adapter.is_replaceable(existing_relation, partition_by.name, cluster_by) %}
           {% do log("Hard refreshing " ~ existing_relation ~ " because it is not replaceable") %}
           {{ adapter.drop_relation(existing_relation) }}
       {% endif %}
@@ -38,24 +38,15 @@
         {% set build_sql %}
         
         DECLARE
-            partition_min,
-            partition_max date;
+            partitions_for_upsert array<{{partition_by.data_type}}>;
 
         -- create temporary table
         {{ create_table_as('scripting', tmp_relation, sql) }}
 
-        SET (
-            partition_min,
-            partition_max
-        ) = (
-            
+        SET (partitions_for_upsert) = (
             select as struct
-            
-                min({{partition_by}}),
-                max({{partition_by}})
-            
+                array_agg(distinct {{cast_to_date(partition_by)}})
             from {{tmp_relation.identifier}}
-        
         );
         {%- set source_sql -%}
         (

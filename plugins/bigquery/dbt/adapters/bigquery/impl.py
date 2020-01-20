@@ -419,7 +419,9 @@ class BigQueryAdapter(BaseAdapter):
         can replace an existing relation in the database. BigQuery does not
         allow tables to be replaced with another table that has a different
         partitioning spec. This method returns True if the given config spec is
-        identical to that of the existing table.
+        identical to that of the existing table. N.B. Since BQ integer range
+        partitioning is in beta, compare only the name of the partition
+        field.
         """
         try:
             table = self.connections.get_bq_table(
@@ -430,9 +432,13 @@ class BigQueryAdapter(BaseAdapter):
         except google.cloud.exceptions.NotFound:
             return True
 
-        table_partition = table.time_partitioning
-        if table_partition is not None:
-            table_partition = table_partition.field
+        time_partition = table.time_partitioning
+        range_partition = table.range_partitioning
+
+        if time_partition is not None:
+            table_partition = time_partition.field
+        if range_partition is not None:
+            table_partition = range_partition.field
 
         table_cluster = table.clustering_fields
 

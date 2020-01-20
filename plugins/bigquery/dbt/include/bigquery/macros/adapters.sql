@@ -1,14 +1,73 @@
-{% macro partition_by(raw_partition_by) %}
-  {%- if raw_partition_by is none -%}
-    {{ return('') }}
-  {% endif %}
-
-  {% set partition_by_clause %}
-    partition by {{ raw_partition_by }}
-  {%- endset -%}
-
-  {{ return(partition_by_clause) }}
+{# call this macro first, assume new spec thereafter #}
+{%- macro parse_partition_by(raw_partition_by) -%}
+    {# check for new partition_by spec #}
+    {% if raw_partition_by is mapping %}
+        {{return(raw_partition_by)}}
+    {# otherwise, see what kind of string is being passed #}
+    {% elif raw_partition_by is string %}
+        {% if 'range_bucket' in raw_partition_by|lower %}
+            {# if integer-range (beta), we have no hope of parsing #}
+            {{ exceptions.raise_catompiler_error(
+                "BigQuery integer-range partitioning (currently in beta) is supported
+                by the new `partition_by` config, which expects a dictionary. See:
+                    latest dbt docs link"
+            ) }}
+        {% else %}
+            {# if date or timestamp, raise deprecation warning and *try* to parse #}
+            {% set p = modules.re.compile(
+                '([ ]?date[ ]?\([ ]?)?([\`\w]+)(?:[ ]?\)[ ]?)?',
+                modules.re.IGNORECASE) %}
+            {% set m = p.match(raw_partition_by) %}
+            {% set inferred_partition_by = {
+                'name': m.group(2),
+                'data_type': 'timestamp' if ('date' in m.group(1)|lower) else 'date'
+            } %}
+            {% set deprecation_warning %}
+                Deprecation warning: as of dbt version 0.16.0, the `partition_by`
+                config on BigQuery now expects a dictionary. This will cause an error
+                in a future release.
+                
+                You supplied: {{raw_partition_by}}
+                dbt inferred: {{inferred_partition_by}}
+            {% endset %}            
+            {% do log(deprecation_warning, info = true) %}
+            {{return(inferred_partition_by)}}
+        {% endif %}
+    {% else %}
+        {{return(none)}}
+    {% endif %}
 {%- endmacro -%}
+
+{% macro partition_by(partition_by_dict) %}
+    {%- set partition_by_type = partition_by_dict.data_type|trim|lower -%}
+    {%- if partition_by_type == 'date' -%}
+        partition by {{ partition_by_dict.name }}
+    {%- elif partition_by_type in ('timestamp','datetime') -%}
+        partition by date({{ partition_by_dict.name }})
+    {%- elif partition_by_type in ('integer','int64') -%}
+        {%- set pbr = partition_by_dict.range -%}
+        partition by range_bucket(
+            {{partition_by_dict.name}},
+            generate_array({{pbr.start}}, {{pbr.end}}, {{pbr.interval}})
+        )
+    {%- endif -%}
+{%- endmacro -%}
+
+{% macro cast_to_date(partition_by_dict, alias = '') %}
+
+    {%- set partition_col_exp -%}
+        {%- if alias -%} `{{alias}}`.`{{partition_by_dict.name}}`
+        {%- else -%} `{{partition_by_dict.name}}`
+        {%- endif -%}
+    {%- endset -%}
+
+    {%- if partition_by_dict.type in ('timestamp','datetime') -%}
+        date({{partition_col_exp}})
+    {%- else -%}
+        {{partition_col_exp}}
+    {%- endif -%}
+
+{% endmacro %}
 
 
 {% macro cluster_by(raw_cluster_by) %}
@@ -62,6 +121,8 @@
   {%- set raw_kms_key_name = config.get('kms_key_name', none) -%}
   {%- set raw_labels = config.get('labels', []) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
+  
+  {%- set partition_by_dict = parse_partition_by(raw_partition_by) -%}
 
   {{ sql_header if sql_header is not none }}
   
@@ -76,7 +137,7 @@
   {%- else -%}
 
   create or replace table {{ relation }}
-  {{ partition_by(raw_partition_by) }}
+  {{ partition_by(partition_by_dict) }}
   {{ cluster_by(raw_cluster_by) }}
   {{ bigquery_table_options(
       persist_docs=raw_persist_docs, temporary=temporary, kms_key_name=raw_kms_key_name,

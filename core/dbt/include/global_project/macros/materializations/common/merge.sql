@@ -19,33 +19,6 @@
     {{ return(dest_cols_csv) }}
 {% endmacro %}
 
-{% macro get_dest_partition_filter(partition_by) %}
-
-    {#-- determine whether the partition column is a timestamp or date --#}
-    {% set p = modules.re.compile(
-        '([ ]?date[ ]?\([ ]?)?(\w+)(?:[ ]?\)[ ]?)?',
-        modules.re.IGNORECASE) %}
-    {% set m = p.match(partition_by) %}
-    {% set cast_to_date = ('date' in m.group(1)|lower) %}
-    {% set partition_colname = m.group(2) %}
-
-    {%- set partition_expression -%}
-        {%- if cast_to_date -%}
-            DATE(DBT_INTERNAL_DEST.{{partition_colname}})
-        {%- else -%}
-            DBT_INTERNAL_DEST.{{partition_colname}}
-        {%- endif -%}
-    {%- endset -%}
-
-    {%- set dest_partition_filter -%}
-        {{partition_expression}} between partition_min and partition_max
-    {%- endset -%}
-    
-    {% do return(dest_partition_filter) %}
-
-{% endmacro %}
-
-
 {% macro common_get_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
     {%- set dest_cols_csv =  get_quoted_csv(dest_columns | map(attribute="name")) -%}
 
@@ -53,13 +26,16 @@
 
     {% if unique_key %}
         {% set unique_key_match %}
-            DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }}
+            DBT_INTERNAL_SOURCE.`{{ unique_key }}` = DBT_INTERNAL_DEST.`{{ unique_key }}`
         {% endset %}
         {% do conditions.append(unique_key_match) %}
     {% endif %}
     
     {%- if partition_by -%}
-        {%- do conditions.append(get_dest_partition_filter(partition_by)) -%}
+        {% set dest_partition_filter %}
+            {{cast_to_date(partition_by, alias = 'DBT_INTERNAL_DEST')}} in unnest(partitions_for_upsert)
+        {% endset %}
+        {%- do conditions.append(dest_partition_filter) -%}
     {% endif %}
 
     merge into {{ target }} as DBT_INTERNAL_DEST
