@@ -8,9 +8,9 @@
   {%- set existing_relation = load_relation(this) %}
   {%- set tmp_relation = make_temp_relation(this) %}
 
-  {%- set partition_by = parse_partition_by(config.get('partition_by', none)) -%}
+  {%- set raw_partition_by = config.get('partition_by', none) -%}
+  {%- set partition_by = adapter.parse_partition_by(raw_partition_by) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
-  {%- set min_source_partition = none -%}
 
   {{ run_hooks(pre_hooks) }}
 
@@ -37,15 +37,19 @@
         
         {% set build_sql %}
         
+        {%- set array_datatype = 
+            'date' if partition_by.data_type in ('timestamp, datetime') 
+            else partition_by.data_type -%}
+        
         DECLARE
-            partitions_for_upsert array<{{partition_by.data_type}}>;
+            partitions_for_upsert array<{{array_datatype}}>;
 
         -- create temporary table
         {{ create_table_as('scripting', tmp_relation, sql) }}
 
         SET (partitions_for_upsert) = (
             select as struct
-                array_agg(distinct {{cast_to_date(partition_by)}})
+                array_agg(distinct {{pprint_partition_field(partition_by)}})
             from {{tmp_relation.identifier}}
         );
         {%- set source_sql -%}

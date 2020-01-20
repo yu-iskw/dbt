@@ -25,6 +25,7 @@ import google.cloud.bigquery
 
 import time
 import agate
+import re
 
 
 def _stub_relation(*args, **kwargs):
@@ -439,17 +440,62 @@ class BigQueryAdapter(BaseAdapter):
         range_partition = table.range_partitioning
 
         if time_partition is not None:
-            return time_partition.field == conf_partition.name \
+            return time_partition.field == conf_partition.get('field', None) \
                 and table_cluster == conf_cluster
 
         if range_partition is not None:
             table_range = range_partition.range_
             conf_range = conf_partition.get('range', None)
-            return range_partition.field == conf_partition.get('name', None) \
+            return range_partition.field == conf_partition.get('field', None) \
                 and table_range.start == conf_range.get('start', None) \
                 and table_range.end == conf_range.get('end', None) \
                 and table_range.interval == conf_range.get('interval', None) \
                 and table_cluster == conf_cluster
+                
+    @available
+    def parse_partition_by(self, raw_partition_by):
+        """
+        dbt>=0.16.0 expects `partition_by` to be a dictionary where previously
+        it was a string. Check the type of `partition_by`, raise error
+        or warning if string, and attempt to convert to dict.
+        """
+        if isinstance(raw_partition_by, dict):
+            if raw_partition_by.get('field', None):
+                if raw_partition_by.get('data_type', None):
+                    return raw_partition_by
+                else:
+                    return raw_partition_by.update({'data_type': 'date'})        
+            else:
+                dbt.exceptions.CompilerException(
+                    'Config `partition_by` is missing required item `field`'
+                )
+        
+        elif isinstance(raw_partition_by, str):
+            if 'range_bucket' in raw_partition_by.lower():
+                dbt.exceptions.CompilerException('''
+                    BigQuery integer range partitioning (beta) is supported \
+                    by the new `partition_by` config, which accepts a \
+                    dictionary. See: [dbt docs link TK]
+                    ''') #TODO
+            else:
+                p = re.compile('([ ]?date[ ]?\([ ]?)?([\`\w]+)(?:[ ]?\)[ ]?)?',
+                    re.IGNORECASE)
+                m = p.match(raw_partition_by)
+                if m.group(1) is not None:
+                    has_date_cast = ('date' in m.group(1).lower())
+                else:
+                    has_date_cast = False
+                inferred_partition_by = {
+                    'field': m.group(2),
+                    'data_type': 'timestamp' if has_date_cast else 'date'
+                    }
+                dbt.deprecations.warn('bq-partition-by-string', 
+                                    raw_partition_by=raw_partition_by,
+                                    inferred_partition_by=inferred_partition_by
+                                    )
+                return inferred_partition_by
+        else:
+            return None
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):

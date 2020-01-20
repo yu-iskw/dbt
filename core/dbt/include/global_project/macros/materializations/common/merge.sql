@@ -26,14 +26,15 @@
 
     {% if unique_key %}
         {% set unique_key_match %}
-            DBT_INTERNAL_SOURCE.`{{ unique_key }}` = DBT_INTERNAL_DEST.`{{ unique_key }}`
+            DBT_INTERNAL_SOURCE.{{ adapter.quote(unique_key) }} = DBT_INTERNAL_DEST.{{ adapter.quote(unique_key) }}
         {% endset %}
         {% do conditions.append(unique_key_match) %}
     {% endif %}
     
+    {# BigQuery only #}
     {%- if partition_by -%}
         {% set dest_partition_filter %}
-            {{cast_to_date(partition_by, alias = 'DBT_INTERNAL_DEST')}} in unnest(partitions_for_upsert)
+            {{pprint_partition_field(partition_by, alias = 'DBT_INTERNAL_DEST')}} in unnest(partitions_for_upsert)
         {% endset %}
         {%- do conditions.append(dest_partition_filter) -%}
     {% endif %}
