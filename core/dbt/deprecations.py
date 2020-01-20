@@ -108,7 +108,7 @@ class BigQueryPartitionByStringDeprecation(DBTDeprecation):
 
     For more information, see:
         [dbt docs link]
-    ''' #TODO
+    '''  # TODO
 
 
 _adapter_renamed_description = """\

@@ -451,7 +451,7 @@ class BigQueryAdapter(BaseAdapter):
                 and table_range.end == conf_range.get('end', None) \
                 and table_range.interval == conf_range.get('interval', None) \
                 and table_cluster == conf_cluster
-                
+
     @available
     def parse_partition_by(self, raw_partition_by):
         """
@@ -464,21 +464,22 @@ class BigQueryAdapter(BaseAdapter):
                 if raw_partition_by.get('data_type', None):
                     return raw_partition_by
                 else:
-                    return raw_partition_by.update({'data_type': 'date'})        
+                    return raw_partition_by.update({'data_type': 'date'})
             else:
                 dbt.exceptions.CompilerException(
                     'Config `partition_by` is missing required item `field`'
                 )
-        
+
         elif isinstance(raw_partition_by, str):
             if 'range_bucket' in raw_partition_by.lower():
                 dbt.exceptions.CompilerException('''
                     BigQuery integer range partitioning (beta) is supported \
                     by the new `partition_by` config, which accepts a \
                     dictionary. See: [dbt docs link TK]
-                    ''') #TODO
+                    ''')  # TODO
             else:
-                p = re.compile('([ ]?date[ ]?\([ ]?)?([\`\w]+)(?:[ ]?\)[ ]?)?',
+                p = re.compile(
+                    '([ ]?date[ ]?\\([ ]?)?([\\`\\w]+)(?:[ ]?\\)[ ]?)?',
                     re.IGNORECASE)
                 m = p.match(raw_partition_by)
                 if m.group(1) is not None:
@@ -488,11 +489,12 @@ class BigQueryAdapter(BaseAdapter):
                 inferred_partition_by = {
                     'field': m.group(2),
                     'data_type': 'timestamp' if has_date_cast else 'date'
-                    }
-                dbt.deprecations.warn('bq-partition-by-string', 
-                                    raw_partition_by=raw_partition_by,
-                                    inferred_partition_by=inferred_partition_by
-                                    )
+                }
+                dbt.deprecations.warn(
+                    'bq-partition-by-string',
+                    raw_partition_by=raw_partition_by,
+                    inferred_partition_by=inferred_partition_by
+                )
                 return inferred_partition_by
         else:
             return None
