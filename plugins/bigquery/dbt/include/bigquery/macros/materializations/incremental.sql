@@ -22,7 +22,7 @@
       {% set build_sql = create_table_as(False, target_relation, sql) %}
   {% elif full_refresh_mode %}
       {#-- If the partition/cluster config has changed, then we must drop and recreate --#}
-      {% if not adapter.is_replaceable(existing_relation, partition_by.name, cluster_by) %}
+      {% if not adapter.is_replaceable(existing_relation, partition_by, cluster_by) %}
           {% do log("Hard refreshing " ~ existing_relation ~ " because it is not replaceable") %}
           {{ adapter.drop_relation(existing_relation) }}
       {% endif %}

@@ -419,9 +419,7 @@ class BigQueryAdapter(BaseAdapter):
         can replace an existing relation in the database. BigQuery does not
         allow tables to be replaced with another table that has a different
         partitioning spec. This method returns True if the given config spec is
-        identical to that of the existing table. N.B. Since BQ integer range
-        partitioning is in beta, compare only the name of the partition
-        field.
+        identical to that of the existing table.
         """
         try:
             table = self.connections.get_bq_table(
@@ -432,21 +430,26 @@ class BigQueryAdapter(BaseAdapter):
         except google.cloud.exceptions.NotFound:
             return True
 
-        time_partition = table.time_partitioning
-        range_partition = table.range_partitioning
-
-        if time_partition is not None:
-            table_partition = time_partition.field
-        if range_partition is not None:
-            table_partition = range_partition.field
-
         table_cluster = table.clustering_fields
 
         if isinstance(conf_cluster, str):
             conf_cluster = [conf_cluster]
 
-        return table_partition == conf_partition \
-            and table_cluster == conf_cluster
+        time_partition = table.time_partitioning
+        range_partition = table.range_partitioning
+
+        if time_partition is not None:
+            return time_partition.field == conf_partition.name \
+                and table_cluster == conf_cluster
+
+        if range_partition is not None:
+            table_range = range_partition.range_
+            conf_range = conf_partition.get('range', None)
+            return range_partition.field == conf_partition.get('name', None) \
+                and table_range.start == conf_range.get('start', None) \
+                and table_range.end == conf_range.get('end', None) \
+                and table_range.interval == conf_range.get('interval', None) \
+                and table_cluster == conf_cluster
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
