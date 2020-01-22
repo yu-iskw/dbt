@@ -87,9 +87,11 @@
       {{ relation.include(database=(temporary!='scripting'), schema=(temporary!='scripting')) }}
   {{ partition_by(partition_by_dict) }}
   {{ cluster_by(raw_cluster_by) }}
+  {%- if temporary!='scripting' -%}{# options on temp tables not supported #}
   {{ bigquery_table_options(
       persist_docs=raw_persist_docs, temporary=temporary, kms_key_name=raw_kms_key_name,
       labels=raw_labels) }}
+  {%- endif -%}
   as (
     {{ sql }}
   );
