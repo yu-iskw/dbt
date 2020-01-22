@@ -2,7 +2,7 @@
 {{
 	config(
 		materialized = "table",
-		partition_by = "updated_at",
+		partition_by={'field': 'updated_at'},
 		cluster_by = ["dupe","id"],
 	)
 }}

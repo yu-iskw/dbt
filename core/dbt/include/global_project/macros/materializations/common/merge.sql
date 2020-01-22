@@ -4,8 +4,8 @@
   {{ adapter_macro('get_merge_sql', target, source, unique_key, dest_columns, partition_by) }}
 {%- endmacro %}
 
-{% macro get_delete_insert_merge_sql(target, source, unique_key, dest_columns, partition_by) -%}
-  {{ adapter_macro('get_delete_insert_merge_sql', target, source, unique_key, dest_columns, partition_by) }}
+{% macro get_delete_insert_merge_sql(target, source, unique_key, dest_columns) -%}
+  {{ adapter_macro('get_delete_insert_merge_sql', target, source, unique_key, dest_columns) }}
 {%- endmacro %}
 
 
@@ -26,7 +26,7 @@
 
     {% if unique_key %}
         {% set unique_key_match %}
-            DBT_INTERNAL_SOURCE.{{ adapter.quote(unique_key) }} = DBT_INTERNAL_DEST.{{ adapter.quote(unique_key) }}
+            DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }}
         {% endset %}
         {% do conditions.append(unique_key_match) %}
     {% endif %}
