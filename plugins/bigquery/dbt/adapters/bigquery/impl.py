@@ -455,16 +455,16 @@ class BigQueryAdapter(BaseAdapter):
     @available
     def parse_partition_by(self, raw_partition_by):
         """
-        dbt>=0.16.0 expects `partition_by` to be a dictionary where previously
+        dbt v0.16.0 expects `partition_by` to be a dictionary where previously
         it was a string. Check the type of `partition_by`, raise error
         or warning if string, and attempt to convert to dict.
         """
         if isinstance(raw_partition_by, dict):
-            if raw_partition_by.get('field', None):
-                if raw_partition_by.get('data_type', None):
+            if raw_partition_by.get('field', None) is not None:
+                if raw_partition_by.get('data_type', None) is not None:
                     return raw_partition_by
-                else:
-                    return raw_partition_by.update({'data_type': 'date'})
+                else:  # assume date type as default
+                    return dict(raw_partition_by, data_type = 'date')
             else:
                 dbt.exceptions.CompilerException(
                     'Config `partition_by` is missing required item `field`'
