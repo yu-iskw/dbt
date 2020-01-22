@@ -464,7 +464,7 @@ class BigQueryAdapter(BaseAdapter):
                 if raw_partition_by.get('data_type', None) is not None:
                     return raw_partition_by
                 else:  # assume date type as default
-                    return dict(raw_partition_by, data_type = 'date')
+                    return dict(raw_partition_by, data_type='date')
             else:
                 dbt.exceptions.CompilerException(
                     'Config `partition_by` is missing required item `field`'
