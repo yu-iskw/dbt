@@ -12,8 +12,10 @@ from dbt.contracts.graph.parsed import (
 from dbt.contracts.util import Writable, Replaceable
 from dbt.exceptions import (
     raise_duplicate_resource_name, raise_duplicate_patch_name,
-    CompilationException, InternalException
+    CompilationException, InternalException, raise_compiler_error
 )
+from dbt.node_types import NodeType
+from dbt.ui import printer
 from dbt.version import __version__
 
 
@@ -87,7 +89,29 @@ class ParseResult(JsonSchemaMixin, Writable, Replaceable):
         self.get_file(source_file).nodes.append(node.unique_id)
 
     def add_macro(self, source_file: SourceFile, macro: ParsedMacro):
-        # macros can be overwritten (should they be?)
+        if macro.unique_id in self.macros:
+            # detect that the macro exists and emit an error
+            other_path = self.macros[macro.unique_id].original_file_path
+            # subtract 2 for the "Compilation Error" indent
+            # note that the line wrap eats newlines, so if you want newlines,
+            # this is the result :(
+            msg = printer.line_wrap_message(
+                f'''\
+                dbt found two macros named "{macro.name}" in the project
+                "{macro.package_name}".
+
+
+                To fix this error, rename or remove one of the following
+                macros:
+
+                    - {macro.original_file_path}
+
+                    - {other_path}
+                ''',
+                subtract=2
+            )
+            raise_compiler_error(msg)
+
         self.macros[macro.unique_id] = macro
         self.get_file(source_file).macros.append(macro.unique_id)
 
@@ -117,8 +141,42 @@ class ParseResult(JsonSchemaMixin, Writable, Replaceable):
             if n.original_file_path == match_file.path.original_file_path
         ]
 
+    def _process_node(
+        self,
+        node_id: str,
+        source_file: SourceFile,
+        old_file: SourceFile,
+        old_result: 'ParseResult',
+    ) -> None:
+        """Nodes are a special kind of complicated - there can be multiple
+        with the same name, as long as all but one are disabled.
+        """
+        source_path = source_file.path.original_file_path
+        found: bool = False
+        if node_id in old_result.nodes:
+            old_node = old_result.nodes[node_id]
+            if old_node.original_file_path == source_path:
+                self.add_node(source_file, old_node)
+                found = True
+
+        if node_id in old_result.disabled:
+            matches = old_result._get_disabled(node_id, source_file)
+            for match in matches:
+                self.add_disabled(source_file, match)
+                found = True
+
+        if not found:
+            raise CompilationException(
+                'Expected to find "{}" in cached "manifest.nodes" or '
+                '"manifest.disabled" based on cached file information: {}!'
+                .format(node_id, old_file)
+            )
+
     def sanitized_update(
-        self, source_file: SourceFile, old_result: 'ParseResult',
+        self,
+        source_file: SourceFile,
+        old_result: 'ParseResult',
+        resource_type: NodeType,
     ) -> bool:
         """Perform a santized update. If the file can't be updated, invalidate
         it and return false.
@@ -146,26 +204,23 @@ class ParseResult(JsonSchemaMixin, Writable, Replaceable):
         # because we know this is how we _parsed_ the node, we can safely
         # assume if it's disabled it was done by the project or file, and
         # we can keep our old data
+        # the node ID could be in old_result.disabled AND in old_result.nodes.
+        # In that case, we have to make sure the path also matches.
         for node_id in old_file.nodes:
-            if node_id in old_result.nodes:
-                node = old_result.nodes[node_id]
-                self.add_node(source_file, node)
-            elif node_id in old_result.disabled:
-                matches = old_result._get_disabled(node_id, source_file)
-                for match in matches:
-                    self.add_disabled(source_file, match)
-            else:
-                raise CompilationException(
-                    'Expected to find "{}" in cached "manifest.nodes" or '
-                    '"manifest.disabled" based on cached file information: {}!'
-                    .format(node_id, old_file)
-                )
+            if old_result.nodes[node_id].resource_type != resource_type:
+                continue
+            self._process_node(node_id, source_file, old_file, old_result)
 
+        patched = False
         for name in old_file.patches:
             patch = _expect_value(
                 name, old_result.patches, old_file, "patches"
             )
             self.add_patch(source_file, patch)
+            patched = True
+
+        if patched:
+            self.get_file(source_file).patches.sort()
 
         return True
 

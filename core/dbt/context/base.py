@@ -14,7 +14,7 @@ from dbt.version import __version__ as dbt_version
 
 from dbt.node_types import NodeType
 
-
+import yaml
 # These modules are added to the context. Consider alternative
 # approaches which will extend well to potentially many modules
 import pytz
@@ -139,6 +139,21 @@ def tojson(value, default=None, sort_keys=False):
         return default
 
 
+def fromyaml(value, default=None):
+    try:
+        return yaml.safe_load(value)
+    except (AttributeError, ValueError, yaml.YAMLError):
+        return default
+
+
+# safe_dump defaults to sort_keys=True, but act like json.dumps (the opposite)
+def toyaml(value, default=None, sort_keys=False):
+    try:
+        return yaml.safe_dump(data=value, sort_keys=sort_keys)
+    except (ValueError, yaml.YAMLError):
+        return default
+
+
 def log(msg, info=False):
     if info:
         logger.info(msg)
@@ -164,6 +179,8 @@ class BaseContext:
             'return': _return,
             'fromjson': fromjson,
             'tojson': tojson,
+            'fromyaml': fromyaml,
+            'toyaml': toyaml,
             'log': log,
         }
         if os.environ.get('DBT_MACRO_DEBUGGING'):
@@ -231,7 +248,7 @@ class HasCredentialsContext(ConfigRenderContext):
     def add_macros_from(
         self,
         context: Dict[str, Any],
-        macros: Dict[str, ParsedMacro],
+        macros: Dict[str, ParsedMacro]
     ):
         global_macros: List[Dict[str, Callable]] = []
         local_macros: List[Dict[str, Callable]] = []
@@ -248,9 +265,14 @@ class HasCredentialsContext(ConfigRenderContext):
             # adapter packages are part of the global project space
             _add_macro_map(context, package_name, macro_map)
 
-            if package_name == self.search_package_name:
+            if package_name == self.config.project_name:
+                # If we're in the root project, allow global override
+                global_macros.append(macro_map)
+            elif package_name == self.search_package_name:
+                # If we're in the current project, allow local override
                 local_macros.append(macro_map)
             elif package_name in PACKAGES:
+                # If it comes from a dbt package, allow global override
                 global_macros.append(macro_map)
 
         # Load global macros before local macros -- local takes precedence

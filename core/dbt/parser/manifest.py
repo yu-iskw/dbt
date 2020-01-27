@@ -2,7 +2,7 @@ import itertools
 import os
 import pickle
 from datetime import datetime
-from typing import Dict, Optional, Mapping, Callable, Any
+from typing import Dict, Optional, Mapping, Callable, Any, List, Type
 
 from dbt.include.global_project import PACKAGES
 import dbt.exceptions
@@ -14,7 +14,8 @@ from dbt.clients.system import make_directory
 from dbt.config import Project, RuntimeConfig
 from dbt.contracts.graph.compiled import CompileResultNode
 from dbt.contracts.graph.manifest import Manifest, FilePath, FileHash
-from dbt.parser.base import BaseParser
+from dbt.exceptions import raise_compiler_error
+from dbt.parser.base import BaseParser, Parser
 from dbt.parser.analysis import AnalysisParser
 from dbt.parser.data_test import DataTestParser
 from dbt.parser.docs import DocumentationParser
@@ -35,7 +36,7 @@ PARSING_STATE = DbtProcessState('parsing')
 DEFAULT_PARTIAL_PARSE = False
 
 
-_parser_types = [
+_parser_types: List[Type[Parser]] = [
     ModelParser,
     SnapshotParser,
     AnalysisParser,
@@ -129,13 +130,14 @@ class ManifestLoader:
         old_results: Optional[ParseResult],
     ) -> None:
         block = self._get_file(path, parser)
-        if not self._get_cached(block, old_results):
+        if not self._get_cached(block, old_results, parser):
             parser.parse_file(block)
 
     def _get_cached(
         self,
         block: FileBlock,
         old_results: Optional[ParseResult],
+        parser: BaseParser,
     ) -> bool:
         # TODO: handle multiple parsers w/ same files, by
         # tracking parser type vs node type? Or tracking actual
@@ -143,7 +145,9 @@ class ManifestLoader:
         if old_results is None:
             return False
         if old_results.has_file(block.file):
-            return self.results.sanitized_update(block.file, old_results)
+            return self.results.sanitized_update(
+                block.file, old_results, parser.resource_type
+            )
         return False
 
     def _get_file(self, path: FilePath, parser: BaseParser) -> FileBlock:
@@ -160,7 +164,7 @@ class ManifestLoader:
         macro_manifest: Manifest,
         old_results: Optional[ParseResult],
     ) -> None:
-        parsers = []
+        parsers: List[Parser] = []
         for cls in _parser_types:
             parser = cls(self.results, project, self.root_project,
                          macro_manifest)
@@ -421,7 +425,15 @@ def load_all_projects(config) -> Mapping[str, Project]:
         internal_project_names(),
         _project_directories(config)
     )
-    all_projects.update(_load_projects(config, project_paths))
+    for project_name, project in _load_projects(config, project_paths):
+        if project_name in all_projects:
+            raise_compiler_error(
+                f'dbt found more than one package with the name '
+                f'"{project_name}" included in this project. Package names '
+                f'must be unique in a project. Please rename one of these '
+                f'packages.'
+            )
+        all_projects[project_name] = project
     return all_projects
 
 

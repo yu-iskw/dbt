@@ -107,6 +107,7 @@ BANNED_PROJECT_NAMES = {
     'execute',
     'flags',
     'fromjson',
+    'fromyaml',
     'graph',
     'invocation_id',
     'load_agate_table',
@@ -128,6 +129,7 @@ BANNED_PROJECT_NAMES = {
     'target',
     'this',
     'tojson',
+    'toyaml',
     'try_or_compiler_error',
     'var',
     'write',
@@ -190,6 +192,13 @@ class UserConfig(ExtensibleJsonSchemaMixin, Replaceable):
 
         if self.printer_width:
             printer.printer_width(self.printer_width)
+
+    @classmethod
+    def from_maybe_dict(cls, value: Optional[Dict[str, Any]]) -> 'UserConfig':
+        if value is None:
+            return cls()
+        else:
+            return cls.from_dict(value)
 
 
 @dataclass

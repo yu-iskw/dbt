@@ -3,7 +3,7 @@ import os
 from typing_extensions import Protocol
 from typing import Union, Callable, Any, Dict, TypeVar, Type
 
-import dbt.clients.agate_helper
+from dbt.clients import agate_helper
 from dbt.contracts.graph.compiled import CompiledSeedNode
 from dbt.contracts.graph.parsed import ParsedSeedNode
 import dbt.exceptions
@@ -105,11 +105,11 @@ class ManifestParsedContext(HasCredentialsContext):
 def _store_result(sql_results):
     def call(name, status, agate_table=None):
         if agate_table is None:
-            agate_table = dbt.clients.agate_helper.empty_table()
+            agate_table = agate_helper.empty_table()
 
         sql_results[name] = dbt.utils.AttrDict({
             'status': status,
-            'data': dbt.clients.agate_helper.as_matrix(agate_table),
+            'data': agate_helper.as_matrix(agate_table),
             'table': agate_table
         })
         return ''
@@ -185,8 +185,9 @@ def _build_load_agate_table(
 ) -> Callable[[], agate.Table]:
     def load_agate_table():
         path = model.seed_file_path
+        column_types = model.config.column_types
         try:
-            table = dbt.clients.agate_helper.from_csv(path)
+            table = agate_helper.from_csv(path, text_columns=column_types)
         except ValueError as e:
             dbt.exceptions.raise_compiler_error(str(e))
         table.original_abspath = os.path.abspath(path)
@@ -211,16 +212,21 @@ class ProviderContext(ManifestParsedContext):
         return self.model.package_name
 
     def add_provider_functions(self, context):
-        context['ref'] = self.provider.ref(
-            self.db_wrapper, self.model, self.config, self.manifest
-        )
-        context['source'] = self.provider.source(
-            self.db_wrapper, self.model, self.config, self.manifest
-        )
-        context['config'] = self.provider.Config(
-            self.model, self.source_config
-        )
-        context['execute'] = self.provider.execute
+        # Generate the builtin functions
+        builtins = {
+            'ref': self.provider.ref(
+                self.db_wrapper, self.model, self.config, self.manifest),
+            'source': self.provider.source(
+                self.db_wrapper, self.model, self.config, self.manifest),
+            'config': self.provider.Config(
+                self.model, self.source_config),
+            'execute': self.provider.execute
+        }
+        # Install them at .builtins
+        context['builtins'] = builtins
+        # Install each of them directly in case they're not
+        # clobbered by a macro.
+        context.update(builtins)
 
     def add_exceptions(self, context):
         context['exceptions'] = dbt.exceptions.wrapped_exports(self.model)

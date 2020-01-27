@@ -58,6 +58,7 @@ class UnparsedRunHook(UnparsedNode):
 class NamedTested(JsonSchemaMixin, Replaceable):
     name: str
     description: str = ''
+    meta: Dict[str, Any] = field(default_factory=dict)
     data_type: Optional[str] = None
     tests: Optional[List[Union[Dict[str, Any], str]]] = None
 
@@ -77,7 +78,14 @@ class NodeDescription(NamedTested):
 
 
 @dataclass
-class UnparsedNodeUpdate(ColumnDescription, NodeDescription):
+class HasYamlMetadata(JsonSchemaMixin):
+    original_file_path: str
+    yaml_key: str
+    package_name: str
+
+
+@dataclass
+class UnparsedNodeUpdate(ColumnDescription, NodeDescription, HasYamlMetadata):
     def __post_init__(self):
         NodeDescription.__post_init__(self)
 
@@ -159,6 +167,7 @@ class ExternalPartition(AdditionalPropertiesAllowed, Replaceable):
     name: str = ''
     description: str = ''
     data_type: str = ''
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         if self.name == '' or self.data_type == '':
@@ -206,6 +215,7 @@ class UnparsedSourceTableDefinition(ColumnDescription, NodeDescription):
 class UnparsedSourceDefinition(JsonSchemaMixin, Replaceable):
     name: str
     description: str = ''
+    meta: Dict[str, Any] = field(default_factory=dict)
     database: Optional[str] = None
     schema: Optional[str] = None
     loader: str = ''
@@ -215,6 +225,10 @@ class UnparsedSourceDefinition(JsonSchemaMixin, Replaceable):
     )
     loaded_at_field: Optional[str] = None
     tables: List[UnparsedSourceTableDefinition] = field(default_factory=list)
+
+    @property
+    def yaml_key(self) -> 'str':
+        return 'sources'
 
 
 @dataclass

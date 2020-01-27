@@ -60,18 +60,6 @@ class TestMacroDeprecations(BaseTestDeprecations):
 
 
 class TestMaterializationReturnDeprecation(BaseTestDeprecations):
-    def setUp(self):
-        super().setUp()
-        deprecations.reset_deprecations()
-
-    @property
-    def schema(self):
-        return "deprecation_test_012"
-
-    @staticmethod
-    def dir(path):
-        return path.lstrip("/")
-
     @property
     def models(self):
         return self.dir('custom-models')
@@ -95,11 +83,32 @@ class TestMaterializationReturnDeprecation(BaseTestDeprecations):
         self.assertEqual(expected, deprecations.active_deprecations)
 
 
+class TestModelsKeyMismatchDeprecation(BaseTestDeprecations):
+    @property
+    def models(self):
+        return self.dir('models-key-mismatch')
+
+    @use_profile('postgres')
+    def test_postgres_deprecations_fail(self):
+        # this should fail at compile_time
+        with self.assertRaises(dbt.exceptions.CompilationException) as exc:
+            self.run_dbt(strict=True)
+        exc_str = ' '.join(str(exc.exception).split())  # flatten all whitespace
+        self.assertIn('"seed" is a seed node, but it is specified in the models section', exc_str)
+
+    @use_profile('postgres')
+    def test_postgres_deprecations(self):
+        self.assertEqual(deprecations.active_deprecations, set())
+        self.run_dbt(strict=False)
+        expected = {'models-key-mismatch'}
+        self.assertEqual(expected, deprecations.active_deprecations)
+
+
 class TestBQPartitionByDeprecation(BaseTestDeprecations):
     @property
     def models(self):
         return self.dir('bq-partitioned-models')
-    
+
     @use_profile('bigquery')
     def test_bigquery_partition_by_fail(self):
         self.run_dbt(['seed'])
@@ -111,4 +120,3 @@ class TestBQPartitionByDeprecation(BaseTestDeprecations):
         self.assertEqual(deprecations.active_deprecations, set())
         self.run_dbt(strict=False)
         expected = {'bq-partition-by-string'}
-        self.assertEqual(expected, deprecations.active_deprecations)

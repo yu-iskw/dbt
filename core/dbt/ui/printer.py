@@ -1,3 +1,5 @@
+import textwrap
+import time
 from typing import Dict, Optional, Tuple
 
 from dbt.logger import GLOBAL_LOGGER as logger, DbtStatusMessage, TextOnly
@@ -6,7 +8,6 @@ from dbt.tracking import InvocationProcessor
 from dbt.utils import get_materialization
 import dbt.ui.colors
 
-import time
 
 USE_COLORS = False
 
@@ -380,3 +381,25 @@ def print_run_end_messages(results, early_exit: bool = False) -> None:
             print_run_result_error(warning, is_warning=True)
 
         print_run_status_line(results)
+
+
+def line_wrap_message(
+    msg: str, subtract: int = 0, dedent: bool = True, prefix: str = ''
+) -> str:
+    '''
+    Line wrap the given message to PRINTER_WIDTH - {subtract}. Convert double
+    newlines to newlines and avoid calling textwrap.fill() on them (like
+    markdown)
+    '''
+    width = PRINTER_WIDTH - subtract
+    if dedent:
+        msg = textwrap.dedent(msg)
+
+    if prefix:
+        msg = f'{prefix}{msg}'
+
+    # If the input had an explicit double newline, we want to preserve that
+    # (we'll turn it into a single line soon). Support windows, too.
+    splitter = '\r\n\r\n' if '\r\n\r\n' in msg else '\n\n'
+    chunks = msg.split(splitter)
+    return '\n'.join(textwrap.fill(chunk, width=width) for chunk in chunks)

@@ -22,7 +22,7 @@ import dbt.flags
 from dbt.contracts.graph.unparsed import (
     UnparsedNode, UnparsedMacro, UnparsedDocumentationFile, Quoting,
     UnparsedBaseNode, FreshnessThreshold, ExternalTable,
-    AdditionalPropertiesAllowed
+    AdditionalPropertiesAllowed, HasYamlMetadata
 )
 from dbt.contracts.util import Replaceable, list_str
 from dbt.logger import GLOBAL_LOGGER as logger  # noqa
@@ -119,6 +119,7 @@ class NodeConfig(
 class ColumnInfo(JsonSchemaMixin, Replaceable):
     name: str
     description: str = ''
+    meta: Dict[str, Any] = field(default_factory=dict)
     data_type: Optional[str] = None
 
 
@@ -172,15 +173,17 @@ class ParsedNodeMixins:
     def depends_on_nodes(self):
         return self.depends_on.nodes
 
-    def patch(self, patch):
+    def patch(self, patch: 'ParsedNodePatch'):
         """Given a ParsedNodePatch, add the new information to the node."""
         # explicitly pick out the parts to update so we don't inadvertently
         # step on the model name or anything
-        self.patch_path = patch.original_file_path
+        self.patch_path: Optional[str] = patch.original_file_path
         self.description = patch.description
         self.columns = patch.columns
         self.docrefs = patch.docrefs
+        self.meta = patch.meta
         if dbt.flags.STRICT_MODE:
+            assert isinstance(self, JsonSchemaMixin)
             self.to_dict(validate=True)
 
     def get_materialization(self):
@@ -215,6 +218,7 @@ class ParsedNodeDefaults(ParsedNodeMandatory):
     docrefs: List[Docref] = field(default_factory=list)
     description: str = field(default='')
     columns: Dict[str, ColumnInfo] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
     patch_path: Optional[str] = None
     build_path: Optional[str] = None
 
@@ -449,12 +453,12 @@ class ParsedSnapshotNode(ParsedNode):
 # regular parsed node. Note that description and columns must be present, but
 # may be empty.
 @dataclass
-class ParsedNodePatch(JsonSchemaMixin, Replaceable):
+class ParsedNodePatch(HasYamlMetadata, Replaceable):
     name: str
     description: str
-    original_file_path: str
     columns: Dict[str, ColumnInfo]
     docrefs: List[Docref]
+    meta: Dict[str, Any]
 
 
 @dataclass
@@ -507,6 +511,8 @@ class ParsedSourceDefinition(
     docrefs: List[Docref] = field(default_factory=list)
     description: str = ''
     columns: Dict[str, ColumnInfo] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
+    source_meta: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_ephemeral_model(self):
