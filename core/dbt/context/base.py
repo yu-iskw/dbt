@@ -117,7 +117,7 @@ def get_datetime_module_context() -> Dict[str, Any]:
 def get_context_modules() -> Dict[str, Dict[str, Any]]:
     return {
         'pytz': get_pytz_module_context(),
-        'datetime': get_datetime_module_context()
+        'datetime': get_datetime_module_context(),
     }
 
 

@@ -79,15 +79,15 @@
   {%- set sql_header = config.get('sql_header', none) -%}
   
   {%- set partition_by_dict = adapter.parse_partition_by(raw_partition_by) -%}
+  {%- set is_scripting = (temporary == 'scripting') -%} {# "true" temp tables only possible when scripting #}
 
   {{ sql_header if sql_header is not none }}
 
-  {# "true" temp tables only possible when scripting #}
-  create or replace {% if temporary=='scripting' -%}temp{%- endif %} table
-      {{ relation.include(database=(temporary!='scripting'), schema=(temporary!='scripting')) }}
+  create or replace {% if is_scripting -%}temp{%- endif %} table
+      {{ relation.include(database=(not is_scripting), schema=(not is_scripting)) }}
   {{ partition_by(partition_by_dict) }}
   {{ cluster_by(raw_cluster_by) }}
-  {%- if temporary!='scripting' -%}{# options on temp tables not supported #}
+  {%- if not is_scripting -%}{# options on temp tables not supported #}
   {{ bigquery_table_options(
       persist_docs=raw_persist_docs, temporary=temporary, kms_key_name=raw_kms_key_name,
       labels=raw_labels) }}
