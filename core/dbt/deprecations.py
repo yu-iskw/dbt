@@ -115,12 +115,14 @@ class BigQueryPartitionByStringDeprecation(DBTDeprecation):
     As of dbt v0.16.0, the `partition_by` config in BigQuery accepts a
     dictionary containing `field` and `data_type`.
 
+
     You provided: {raw_partition_by}
     dbt inferred: {inferred_partition_by}
 
+
     For more information, see:
-        [dbt docs link]
-    '''  # TODO
+    https://docs.getdbt.com/docs/upgrading-to-0-16-0
+    '''
 
 
 _adapter_renamed_description = """\

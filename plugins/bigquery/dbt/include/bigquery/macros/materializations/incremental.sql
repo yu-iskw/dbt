@@ -1,4 +1,41 @@
 
+{% macro bq_partition_merge(tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns) %}
+  {%- set array_datatype = 
+      'date' if partition_by.data_type in ('timestamp, datetime') 
+      else partition_by.data_type -%}
+
+  {% set predicate -%}
+      {{ pprint_partition_field(
+          partition_by,
+          alias = 'DBT_INTERNAL_DEST')
+      }} in unnest(partitions_for_upsert)
+  {%- endset %}
+
+  {%- set source_sql -%}
+  (
+    select * from {{tmp_relation.identifier}}
+  )
+  {%- endset -%}
+
+  -- generated script to merge partitions into {{ target_relation }}
+  declare partitions_for_upsert array<{{array_datatype}}>;
+
+  -- 1. create a temp table
+  {{ create_table_as(True, tmp_relation, sql) }}
+
+  -- 2. define partitions to update
+  set (partitions_for_upsert) = (
+      select as struct
+          array_agg(distinct {{pprint_partition_field(partition_by)}})
+      from {{tmp_relation.identifier}}
+  );
+
+  -- 3. run the merge statement
+  {{ get_merge_sql(target_relation, source_sql, unique_key, dest_columns, [predicate]) }}
+
+{% endmacro %}
+
+
 {% materialization incremental, adapter='bigquery' -%}
 
   {%- set unique_key = config.get('unique_key') -%}
@@ -29,52 +66,29 @@
       {% set build_sql = create_table_as(False, target_relation, sql) %}
   {% else %}
      {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
-     
-     {%- set dest_partition = none -%}
-     
+
      {#-- if partitioned, use BQ scripting to get the range of partition values to be updated --#}
      {% if partition_by %}
-        
-        {% set build_sql %}
-        
-        {%- set array_datatype = 
-            'date' if partition_by.data_type in ('timestamp, datetime') 
-            else partition_by.data_type -%}
-        
-        DECLARE
-            partitions_for_upsert array<{{array_datatype}}>;
+        {% set build_sql = bq_partition_merge(
+            tmp_relation,
+            target_relation,
+            sql,
+            unique_key,
+            partition_by,
+            dest_columns) %}
 
-        -- create temporary table
-        {{ create_table_as('scripting', tmp_relation, sql) }}
+     {% else %}
+       {#-- wrap sql in parens to make it a subquery --#}
+       {%- set source_sql -%}
+         (
+           {{sql}}
+         )
+       {%- endset -%}
 
-        SET (partitions_for_upsert) = (
-            select as struct
-                array_agg(distinct {{pprint_partition_field(partition_by)}})
-            from {{tmp_relation.identifier}}
-        );
-        {%- set source_sql -%}
-        (
-          select * from {{tmp_relation.identifier}}
-        )
-        {%- endset -%}
-        
-        {{ get_merge_sql(target_relation, source_sql, unique_key, dest_columns, partition_by) }}
-        
-        {% endset %}
-          
-      {% else %}
-      
-          {#-- wrap sql in parens to make it a subquery --#}
-          {%- set source_sql -%}
-            (
-              {{sql}}
-            )
-          {%- endset -%}
-          
-          {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns, partition_by) %}
-          
-      {% endif %}
-     
+       {% set build_sql = get_merge_sql(target_relation, source_sql, unique_key, dest_columns) %}
+
+     {% endif %}
+
   {% endif %}
 
   {%- call statement('main') -%}

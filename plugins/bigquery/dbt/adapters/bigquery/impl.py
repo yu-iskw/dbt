@@ -5,6 +5,7 @@ import dbt.exceptions
 import dbt.flags as flags
 import dbt.clients.gcloud
 import dbt.clients.agate_helper
+import dbt.links
 
 from dbt.adapters.base import BaseAdapter, available, RelationType
 from dbt.adapters.bigquery.relation import (
@@ -26,6 +27,14 @@ import google.cloud.bigquery
 import time
 import agate
 import re
+
+
+BQ_INTEGER_RANGE_NOT_SUPPORTED = f"""
+BigQuery integer range partitioning is only supported by the
+`partition_by` config, which accepts a dictionary.
+
+See: {dbt.links.BigQueryNewPartitionBy}
+"""
 
 
 def _stub_relation(*args, **kwargs):
@@ -471,31 +480,34 @@ class BigQueryAdapter(BaseAdapter):
                 )
 
         elif isinstance(raw_partition_by, str):
+            raw_partition_by = raw_partition_by.strip()
             if 'range_bucket' in raw_partition_by.lower():
-                dbt.exceptions.CompilerException('''
-                    BigQuery integer range partitioning (beta) is supported \
-                    by the new `partition_by` config, which accepts a \
-                    dictionary. See: [dbt docs link TK]
-                    ''')  # TODO
+                dbt.exceptions.CompilerException(BQ_INTEGER_RANGE_NOT_SUPPORTED)
+
+            elif raw_partition_by.lower().startswith('date(')
+                matches = re.match('date\((.*)\)', raw_partition_by, re.IGNORECASE)
+                if not matches:
+                    raise RuntimeError(f"Unparseable partition_by: {raw_partition_by}")
+
+                partition_by = matches.group(1)
+                data_type = 'date'
+
             else:
-                p = re.compile(
-                    '([ ]?date[ ]?\\([ ]?)?([\\`\\w]+)(?:[ ]?\\)[ ]?)?',
-                    re.IGNORECASE)
-                m = p.match(raw_partition_by)
-                if m.group(1) is not None:
-                    has_date_cast = ('date' in m.group(1).lower())
-                else:
-                    has_date_cast = False
-                inferred_partition_by = {
-                    'field': m.group(2),
-                    'data_type': 'timestamp' if has_date_cast else 'date'
-                }
-                dbt.deprecations.warn(
-                    'bq-partition-by-string',
-                    raw_partition_by=raw_partition_by,
-                    inferred_partition_by=inferred_partition_by
-                )
-                return inferred_partition_by
+                partition_by = raw_partition_by
+                data_type = 'timestamp'
+
+            inferred_partition_by = {
+                'field': partition_by,
+                'data_type': data_type
+            }
+
+            dbt.deprecations.warn(
+                'bq-partition-by-string',
+                raw_partition_by=raw_partition_by,
+                inferred_partition_by=inferred_partition_by
+            )
+
+            return inferred_partition_by
         else:
             return None
 

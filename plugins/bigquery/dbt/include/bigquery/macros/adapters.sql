@@ -48,9 +48,6 @@
   {%- if description is not none -%}
     {%- do opts.update({'description': "'" ~ description ~ "'"}) -%}
   {%- endif -%}
-  {%- if temporary and temporary != 'scripting' -%}
-    {% do opts.update({'expiration_timestamp': 'TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)'}) %}
-  {%- endif -%}
   {%- if kms_key_name -%}
     {%- do opts.update({'kms_key_name': "'" ~ kms_key_name ~ "'"}) -%}
   {%- endif -%}
@@ -77,25 +74,25 @@
   {%- set raw_kms_key_name = config.get('kms_key_name', none) -%}
   {%- set raw_labels = config.get('labels', []) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
-  
+
   {%- set partition_by_dict = adapter.parse_partition_by(raw_partition_by) -%}
-  {%- set is_scripting = (temporary == 'scripting') -%} {# "true" temp tables only possible when scripting #}
 
   {{ sql_header if sql_header is not none }}
 
-  create or replace {% if is_scripting -%}temp{%- endif %} table
+  create or replace {% if temporary -%}temp{%- endif %} table
       {{ relation.include(database=(not is_scripting), schema=(not is_scripting)) }}
   {{ partition_by(partition_by_dict) }}
   {{ cluster_by(raw_cluster_by) }}
-  {%- if not is_scripting -%}{# options on temp tables not supported #}
-  {{ bigquery_table_options(
-      persist_docs=raw_persist_docs, temporary=temporary, kms_key_name=raw_kms_key_name,
-      labels=raw_labels) }}
-  {%- endif -%}
+  {%- if not temporary -%}
+    {{ bigquery_table_options(
+        persist_docs=raw_persist_docs,
+        kms_key_name=raw_kms_key_name,
+        labels=raw_labels) }}
+    {%- endif -%}
   as (
     {{ sql }}
   );
-  
+
 {%- endmacro -%}
 
 
