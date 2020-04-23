@@ -68,7 +68,10 @@
     {% set updated_at = config['updated_at'] %}
 
     {% set row_changed_expr -%}
-        ({{ snapshotted_rel }}.{{ updated_at }} < {{ current_rel }}.{{ updated_at }})
+        ({{ snapshotted_rel }}.{{ updated_at }} < {{ current_rel }}.{{ updated_at }}
+            -- this indicates that the source record was hard-deleted
+            or {{ current_rel }}.{{ primary_key }} is null
+        )
     {%- endset %}
 
     {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
@@ -148,12 +151,16 @@
     {%- if column_added -%}
         TRUE
     {%- else -%}
-    {%- for col in check_cols -%}
+    -- this indicates that the source record was hard-deleted
+    {{ current_rel }}.{{ primary_key }} is null) or
+    {% for col in check_cols -%}
         {{ snapshotted_rel }}.{{ col }} != {{ current_rel }}.{{ col }}
         or
         ({{ snapshotted_rel }}.{{ col }} is null) != ({{ current_rel }}.{{ col }} is null)
         {%- if not loop.last %} or {% endif -%}
     {%- endfor -%}
+
+
     {%- endif -%}
     )
     {%- endset %}

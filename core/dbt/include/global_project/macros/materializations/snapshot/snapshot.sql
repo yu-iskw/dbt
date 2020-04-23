@@ -110,10 +110,10 @@
         select
             'update' as dbt_change_type,
             snapshotted_data.dbt_scd_id,
-            source_data.dbt_valid_from as dbt_valid_to
+            coalesce(source_data.dbt_valid_from, {{ snapshot_get_time() }}) as dbt_valid_to
 
-        from source_data
-        join snapshotted_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
+        from snapshotted_data
+        left join source_data  on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
         where snapshotted_data.dbt_valid_to is null
         and (
             {{ strategy.row_changed }}
