@@ -524,6 +524,9 @@ def get_rendered(
         _HAS_RENDER_CHARS_PAT.search(string) is None
     ):
         return string
+    elif string == '':
+        return string
+
     template = get_template(
         string,
         ctx,
