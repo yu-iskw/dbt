@@ -37,6 +37,10 @@ class SeedRunner(ModelRunner):
 
 
 class SeedTask(RunTask):
+    def defer_to_manifest(self, selected_uids):
+        # seeds don't defer
+        return
+
     def raise_on_first_error(self):
         return False
 
