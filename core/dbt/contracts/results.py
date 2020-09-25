@@ -101,6 +101,7 @@ class RunModelResult(WritableRunModelResult):
 class ExecutionResult(JsonSchemaMixin):
     results: Sequence[BaseResult]
     elapsed_time: float
+    args: Dict
 
     def __len__(self):
         return len(self.results)
@@ -136,6 +137,7 @@ class RunResultsArtifact(
         results: Sequence[RunResult],
         elapsed_time: float,
         generated_at: datetime,
+        args: Dict
     ):
         meta = RunResultsMetadata(
             dbt_schema_version=str(cls.dbt_schema_version),
@@ -145,6 +147,7 @@ class RunResultsArtifact(
             metadata=meta,
             results=results,
             elapsed_time=elapsed_time,
+            args=args
         )
 
 

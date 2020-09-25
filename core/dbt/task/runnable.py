@@ -529,10 +529,14 @@ class GraphRunnableTask(ManifestTask):
                 create_future.result()
 
     def get_result(self, results, elapsed_time, generated_at):
+        var_args = vars(self.args)
+        del var_args['cls']
+        del var_args['test_new_parser']
         return RunResultsArtifact.from_node_results(
             results=results,
             elapsed_time=elapsed_time,
-            generated_at=generated_at
+            generated_at=generated_at,
+            args=var_args
         )
 
     def task_end_messages(self, results):
