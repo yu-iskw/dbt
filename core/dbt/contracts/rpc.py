@@ -233,6 +233,7 @@ class RemoteExecutionResult(ExecutionResult, RemoteResult):
             generated_at=self.generated_at,
             results=self.results,
             elapsed_time=self.elapsed_time,
+            args=self.args,
         )
         writable.write(path)
 
@@ -246,6 +247,7 @@ class RemoteExecutionResult(ExecutionResult, RemoteResult):
             generated_at=base.metadata.generated_at,
             results=base.results,
             elapsed_time=base.elapsed_time,
+            args=base.args,
             logs=logs,
         )
 

@@ -101,7 +101,6 @@ class RunModelResult(WritableRunModelResult):
 class ExecutionResult(JsonSchemaMixin):
     results: Sequence[BaseResult]
     elapsed_time: float
-    args: Dict
 
     def __len__(self):
         return len(self.results)
@@ -130,6 +129,7 @@ class RunResultsArtifact(
     ArtifactMixin,
 ):
     results: Sequence[RunResult]
+    args: Dict
 
     @classmethod
     def from_node_results(
