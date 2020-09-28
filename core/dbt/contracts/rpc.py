@@ -225,6 +225,7 @@ class RemoteCompileResult(RemoteCompileResultMixin):
 @dataclass
 @schema_version('remote-execution-result', 1)
 class RemoteExecutionResult(ExecutionResult, RemoteResult):
+    args: Dict
     results: Sequence[RunResult]
     generated_at: datetime = field(default_factory=datetime.utcnow)
 
