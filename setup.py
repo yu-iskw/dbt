@@ -43,11 +43,13 @@ setup(
     packages=[],
     install_requires=[
         'dbt-core=={}'.format(package_version),
-        'dbt-postgres=={}'.format(package_version),
-        'dbt-redshift=={}'.format(package_version),
-        'dbt-snowflake=={}'.format(package_version),
-        'dbt-bigquery=={}'.format(package_version),
     ],
+    extras_require={
+        'postgres': 'dbt-postgres=={}'.format(package_version),
+        'redshift': 'dbt-redshift=={}'.format(package_version),
+        'snowflake': 'dbt-snowflake=={}'.format(package_version),
+        'bigquery': 'dbt-bigquery=={}'.format(package_version),
+    },
     zip_safe=False,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
