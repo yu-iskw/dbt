@@ -58,7 +58,7 @@
   {{ sql_header if sql_header is not none }}
 
   create or replace table {{ relation }}
-  {{ bigquery_column_schemas(raw_column_schemas) if raw_column_schemas | length > 0 }}
+  {{ bigquery_column_schemas(raw_column_schemas) if raw_column_schemas is defined and raw_column_schemas | length > 0 }}
   {{ partition_by(partition_config) }}
   {{ cluster_by(raw_cluster_by) }}
   {{ bigquery_table_options(config, model, temporary) }}
