@@ -27,6 +27,14 @@
 
 {%- endmacro -%}
 
+{% macro bigquery_column_schemas(raw_column_schemas) %}
+  {% set column_schemas -%}
+    ({% for column_name, column_schema in raw_column_schemas.items() %}
+      {{ column_name }} {{ column_schema['data_type'] }}{{ "," if not loop.last }}
+    {% endfor %})
+  {%- endset %}
+  {%- do return(column_schemas) -%}
+{%- endmacro -%}
 
 {% macro bigquery_table_options(config, node, temporary) %}
   {% set opts = adapter.get_table_options(config, node, temporary) %}
@@ -40,6 +48,7 @@
 {%- endmacro -%}
 
 {% macro bigquery__create_table_as(temporary, relation, sql) -%}
+  {%- set raw_column_schemas = config.get('column_schemas', {}) -%}
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set raw_cluster_by = config.get('cluster_by', none) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
@@ -49,6 +58,7 @@
   {{ sql_header if sql_header is not none }}
 
   create or replace table {{ relation }}
+  {{ bigquery_column_schemas(raw_column_schemas) }}
   {{ partition_by(partition_config) }}
   {{ cluster_by(raw_cluster_by) }}
   {{ bigquery_table_options(config, model, temporary) }}
