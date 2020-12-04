@@ -48,7 +48,7 @@
 {%- endmacro -%}
 
 {% macro bigquery__create_table_as(temporary, relation, sql) -%}
-  {%- set raw_column_schemas = config.get('column_schemas', {}) -%}
+  {%- set raw_column_schemas = config.get('column_schemas', none) -%}
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set raw_cluster_by = config.get('cluster_by', none) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
@@ -58,7 +58,7 @@
   {{ sql_header if sql_header is not none }}
 
   create or replace table {{ relation }}
-  {{ bigquery_column_schemas(raw_column_schemas) if raw_column_schemas is defined and raw_column_schemas | length > 0 }}
+  {{ bigquery_column_schemas(raw_column_schemas) if raw_column_schemas is not none }}
   {{ partition_by(partition_config) }}
   {{ cluster_by(raw_cluster_by) }}
   {{ bigquery_table_options(config, model, temporary) }}
