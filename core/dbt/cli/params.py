@@ -131,7 +131,8 @@ log_path = click.option(
     "--log-path",
     envvar="DBT_LOG_PATH",
     help="Configure the 'log-path'. Only applies this setting for the current run. Overrides the 'DBT_LOG_PATH' if it is set.",
-    type=click.Path(),
+    default=Path.cwd() / "logs",
+    type=click.Path(resolve_path=True, path_type=Path),
 )
 
 macro_debugging = click.option(

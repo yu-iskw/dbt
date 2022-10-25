@@ -1,63 +1,55 @@
 import betterproto
-from colorama import Style
-from dbt.events.base_types import NoStdOut, BaseEvent, NoFile, Cache
-from dbt.events.types import EventBufferFull, MainReportVersion, EmptyLine
-import dbt.flags as flags
-from dbt.constants import SECRET_ENV_PREFIX, METADATA_ENV_PREFIX
-
-from dbt.logger import make_log_dir_if_missing, GLOBAL_LOGGER
-from datetime import datetime
-import json
 import io
-from io import StringIO, TextIOWrapper
-import logbook
+import json
 import logging
-from logging import Logger
-import sys
-from logging.handlers import RotatingFileHandler
 import os
-import uuid
+import sys
 import threading
-from typing import List, Optional, Union, Callable, Dict
+import uuid
 from collections import deque
+from datetime import datetime
+from io import StringIO, TextIOWrapper
+from logging import Logger
+from logging.handlers import RotatingFileHandler
+from typing import Callable, Dict, List, Optional, Union
 
-LOG_VERSION = 3
+import dbt.flags as flags
+import logbook
+from colorama import Style
+from dbt.constants import METADATA_ENV_PREFIX, SECRET_ENV_PREFIX
+from dbt.events.base_types import BaseEvent, Cache, NoFile, NoStdOut
+from dbt.events.types import EmptyLine, EventBufferFull, MainReportVersion
+from dbt.logger import make_log_dir_if_missing
+
+# create the module-globals
+LOG_VERSION = 2
 EVENT_HISTORY = None
 
-# create the global file logger with no configuration
-FILE_LOG = logging.getLogger("default_file")
-null_handler = logging.NullHandler()
-FILE_LOG.addHandler(null_handler)
+DEFAULT_FILE_LOGGER_NAME = "default_file"
+FILE_LOG = logging.getLogger(DEFAULT_FILE_LOGGER_NAME)
 
-# set up logger to go to stdout with defaults
-# setup_event_logger will be called once args have been parsed
-STDOUT_LOG = logging.getLogger("default_stdout")
-STDOUT_LOG.setLevel(logging.INFO)
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setLevel(logging.INFO)
-STDOUT_LOG.addHandler(stdout_handler)
+DEFAULT_STDOUT_LOGGER_NAME = "default_std_out"
+STDOUT_LOG = logging.getLogger(DEFAULT_STDOUT_LOGGER_NAME)
 
-format_color = True
-format_json = False
 invocation_id: Optional[str] = None
 metadata_vars: Optional[Dict[str, str]] = None
 
 
-def setup_event_logger(log_path, level_override=None):
-    global format_json, format_color, STDOUT_LOG, FILE_LOG
+def setup_event_logger(log_path, log_format, use_colors, debug):
+    global FILE_LOG
+    global STDOUT_LOG
+
     make_log_dir_if_missing(log_path)
 
-    format_json = flags.LOG_FORMAT == "json"
-    # USE_COLORS can be None if the app just started and the cli flags
-    # havent been applied yet
-    format_color = True if flags.USE_COLORS else False
     # TODO this default should live somewhere better
     log_dest = os.path.join(log_path, "dbt.log")
-    level = level_override or (logging.DEBUG if flags.DEBUG else logging.INFO)
+    level = logging.DEBUG if debug else logging.INFO
 
     # overwrite the STDOUT_LOG logger with the configured one
     STDOUT_LOG = logging.getLogger("configured_std_out")
     STDOUT_LOG.setLevel(level)
+    setattr(STDOUT_LOG, "format_json", log_format == "json")
+    setattr(STDOUT_LOG, "format_color", True if use_colors else False)
 
     FORMAT = "%(message)s"
     stdout_passthrough_formatter = logging.Formatter(fmt=FORMAT)
@@ -76,6 +68,8 @@ def setup_event_logger(log_path, level_override=None):
     # overwrite the FILE_LOG logger with the configured one
     FILE_LOG = logging.getLogger("configured_file")
     FILE_LOG.setLevel(logging.DEBUG)  # always debug regardless of user input
+    setattr(FILE_LOG, "format_json", log_format == "json")
+    setattr(FILE_LOG, "format_color", True if use_colors else False)
 
     file_passthrough_formatter = logging.Formatter(fmt=FORMAT)
 
@@ -93,7 +87,7 @@ def capture_stdout_logs() -> StringIO:
     global STDOUT_LOG
     capture_buf = io.StringIO()
     stdout_capture_handler = logging.StreamHandler(capture_buf)
-    stdout_handler.setLevel(logging.DEBUG)
+    stdout_capture_handler.setLevel(logging.DEBUG)
     STDOUT_LOG.addHandler(stdout_capture_handler)
     return capture_buf
 
@@ -146,8 +140,7 @@ def event_to_dict(event: BaseEvent) -> dict:
 # translates an Event to a completely formatted text-based log line
 # type hinting everything as strings so we don't get any unintentional string conversions via str()
 def reset_color() -> str:
-    global format_color
-    return "" if not format_color else Style.RESET_ALL
+    return Style.RESET_ALL if getattr(STDOUT_LOG, "format_color", False) else ""
 
 
 def create_info_text_log_line(e: BaseEvent) -> str:
@@ -189,8 +182,27 @@ def create_json_log_line(e: BaseEvent) -> Optional[str]:
 
 # calls create_stdout_text_log_line() or create_json_log_line() according to logger config
 def create_log_line(e: BaseEvent, file_output=False) -> Optional[str]:
-    global format_json
-    if format_json:
+    global FILE_LOG
+    global STDOUT_LOG
+
+    if FILE_LOG.name == DEFAULT_FILE_LOGGER_NAME and STDOUT_LOG.name == DEFAULT_STDOUT_LOGGER_NAME:
+
+        # TODO: This is only necessary because our test framework doesn't correctly set up logging.
+        # This code should be moved to the test framework when we do CT-XXX (tix # needed)
+        null_handler = logging.NullHandler()
+        FILE_LOG.addHandler(null_handler)
+        setattr(FILE_LOG, "format_json", False)
+        setattr(FILE_LOG, "format_color", False)
+
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.INFO)
+        STDOUT_LOG.setLevel(logging.INFO)
+        STDOUT_LOG.addHandler(stdout_handler)
+        setattr(STDOUT_LOG, "format_json", False)
+        setattr(STDOUT_LOG, "format_color", False)
+
+    logger = FILE_LOG if file_output else STDOUT_LOG
+    if getattr(logger, "format_json"):
         return create_json_log_line(e)  # json output, both console and file
     elif file_output is True or flags.DEBUG:
         return create_debug_text_log_line(e)  # default file output
@@ -237,15 +249,6 @@ def fire_event(e: BaseEvent) -> None:
         return
 
     add_to_event_history(e)
-
-    # backwards compatibility for plugins that require old logger (dbt-rpc)
-    if flags.ENABLE_LEGACY_LOGGER:
-        # using Event::message because the legacy logger didn't differentiate messages by
-        # destination
-        log_line = create_log_line(e)
-        if log_line:
-            send_to_logger(GLOBAL_LOGGER, e.level_tag(), log_line)
-        return  # exit the function to avoid using the current logger as well
 
     # always logs debug level regardless of user input
     if not isinstance(e, NoFile):

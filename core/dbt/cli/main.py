@@ -6,6 +6,7 @@ import click
 from dbt.adapters.factory import adapter_management
 from dbt.cli import params as p
 from dbt.cli.flags import Flags
+from dbt.events.functions import setup_event_logger
 from dbt.profiler import profiler
 from dbt.tracking import initialize_from_flags, track_run
 
@@ -36,6 +37,7 @@ def cli_runner():
 @p.fail_fast
 @p.log_cache_events
 @p.log_format
+@p.log_path
 @p.macro_debugging
 @p.partial_parse
 @p.print
@@ -55,6 +57,14 @@ def cli(ctx, **kwargs):
     """
     flags = Flags()
 
+    # Logging
+    # N.B. Legacy logger is not supported
+    setup_event_logger(
+        flags.LOG_PATH,
+        flags.LOG_FORMAT,
+        flags.USE_COLORS,
+        flags.DEBUG,
+    )
     # Tracking
     initialize_from_flags(flags.ANONYMOUS_USAGE_STATS, flags.PROFILES_DIR)
     ctx.with_resource(track_run(run_command=ctx.invoked_subcommand))
@@ -82,7 +92,6 @@ def cli(ctx, **kwargs):
 @p.fail_fast
 @p.full_refresh
 @p.indirect_selection
-@p.log_path
 @p.models
 @p.profile
 @p.profiles_dir
@@ -129,7 +138,6 @@ def docs(ctx, **kwargs):
 @p.compile_docs
 @p.defer
 @p.exclude
-@p.log_path
 @p.models
 @p.profile
 @p.profiles_dir
@@ -169,7 +177,6 @@ def docs_serve(ctx, **kwargs):
 @p.defer
 @p.exclude
 @p.full_refresh
-@p.log_path
 @p.models
 @p.parse_only
 @p.profile
@@ -259,7 +266,6 @@ def list(ctx, **kwargs):
 @cli.command("parse")
 @click.pass_context
 @p.compile_parse
-@p.log_path
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -282,7 +288,6 @@ def parse(ctx, **kwargs):
 @p.exclude
 @p.fail_fast
 @p.full_refresh
-@p.log_path
 @p.models
 @p.profile
 @p.profiles_dir
@@ -320,7 +325,6 @@ def run_operation(ctx, **kwargs):
 @click.pass_context
 @p.exclude
 @p.full_refresh
-@p.log_path
 @p.models
 @p.profile
 @p.profiles_dir
@@ -393,7 +397,6 @@ def freshness(ctx, **kwargs):
 @p.exclude
 @p.fail_fast
 @p.indirect_selection
-@p.log_path
 @p.models
 @p.profile
 @p.profiles_dir
