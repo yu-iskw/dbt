@@ -7,6 +7,7 @@ from dbt.adapters.factory import adapter_management
 from dbt.cli import params as p
 from dbt.cli.flags import Flags
 from dbt.profiler import profiler
+from dbt.tracking import initialize_from_flags, track_run
 
 
 def cli_runner():
@@ -52,17 +53,21 @@ def cli(ctx, **kwargs):
     """An ELT tool for managing your SQL transformations and data models.
     For more documentation on these commands, visit: docs.getdbt.com
     """
-    incomplete_flags = Flags()
+    flags = Flags()
+
+    # Tracking
+    initialize_from_flags(flags.ANONYMOUS_USAGE_STATS, flags.PROFILES_DIR)
+    ctx.with_resource(track_run(run_command=ctx.invoked_subcommand))
 
     # Profiling
-    if incomplete_flags.RECORD_TIMING_INFO:
-        ctx.with_resource(profiler(enable=True, outfile=incomplete_flags.RECORD_TIMING_INFO))
+    if flags.RECORD_TIMING_INFO:
+        ctx.with_resource(profiler(enable=True, outfile=flags.RECORD_TIMING_INFO))
 
     # Adapter management
     ctx.with_resource(adapter_management())
 
     # Version info
-    if incomplete_flags.VERSION:
+    if flags.VERSION:
         click.echo(f"`version` called\n ctx.params: {pf(ctx.params)}")
         return
     else:
