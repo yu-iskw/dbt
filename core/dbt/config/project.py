@@ -156,7 +156,7 @@ def value_or(value: Optional[T], default: T) -> T:
         return value
 
 
-def _raw_project_from(project_root: str) -> Dict[str, Any]:
+def load_raw_project(project_root: str) -> Dict[str, Any]:
 
     project_root = os.path.normpath(project_root)
     project_yaml_filepath = os.path.join(project_root, "dbt_project.yml")
@@ -485,7 +485,7 @@ class PartialProject(RenderComponents):
         cls, project_root: str, *, verify_version: bool = False
     ) -> "PartialProject":
         project_root = os.path.normpath(project_root)
-        project_dict = _raw_project_from(project_root)
+        project_dict = load_raw_project(project_root)
         config_version = project_dict.get("config-version", 1)
         if config_version != 2:
             raise DbtProjectError(
@@ -645,13 +645,6 @@ class Project:
             raise DbtProjectError(validator_error_message(e)) from e
 
     @classmethod
-    def partial_load(cls, project_root: str, *, verify_version: bool = False) -> PartialProject:
-        return PartialProject.from_project_root(
-            project_root,
-            verify_version=verify_version,
-        )
-
-    @classmethod
     def from_project_root(
         cls,
         project_root: str,
@@ -659,7 +652,7 @@ class Project:
         *,
         verify_version: bool = False,
     ) -> "Project":
-        partial = cls.partial_load(project_root, verify_version=verify_version)
+        partial = PartialProject.from_project_root(project_root, verify_version=verify_version)
         return partial.render(renderer)
 
     def hashed_name(self):
