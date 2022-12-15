@@ -10,9 +10,11 @@ from dbt.config import RuntimeConfig
 from dbt.config.runtime import load_project, load_profile
 from dbt.events.functions import setup_event_logger
 from dbt.profiler import profiler
+from dbt.tracking import initialize_from_flags, track_run
+
+from dbt.task.clean import CleanTask
 from dbt.task.deps import DepsTask
 from dbt.task.run import RunTask
-from dbt.tracking import initialize_from_flags, track_run
 
 
 def cli_runner():
@@ -141,7 +143,13 @@ def build(ctx, **kwargs):
 def clean(ctx, **kwargs):
     """Delete all folders in the clean-targets list (usually the dbt_packages and target directories.)"""
     flags = Flags()
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {flags}")
+    project = ctx.obj["project"]
+
+    task = CleanTask(flags, project)
+
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
 
 
 # dbt docs
