@@ -62,7 +62,6 @@ class dbtRunner:
 @p.cache_selected_only
 @p.debug
 @p.enable_legacy_logger
-@p.event_buffer_size
 @p.fail_fast
 @p.log_cache_events
 @p.log_format

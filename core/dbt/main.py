@@ -211,7 +211,8 @@ def run_from_args(parsed):
     if task.config is not None:
         log_path = getattr(task.config, "log_path", None)
     log_manager.set_path(log_path)
-    setup_event_logger(log_path or "logs", "json", False, True)
+    # WHY WE SET DEBUG TO BE TRUE HERE previously?
+    setup_event_logger(log_path or "logs", "json", False, False)
 
     fire_event(MainReportVersion(version=str(dbt.version.installed), log_version=LOG_VERSION))
     fire_event(MainReportArgs(args=args_to_dict(parsed)))
@@ -479,6 +480,20 @@ def _add_defer_argument(*subparsers):
             nodes.
             """,
             default=flags.DEFER_MODE,
+        )
+
+
+def _add_favor_state_argument(*subparsers):
+    for sub in subparsers:
+        sub.add_optional_argument_inverse(
+            "--favor-state",
+            enable_help="""
+            If set, defer to the state variable for resolving unselected nodes, even if node exist as a database object in the current environment.
+            """,
+            disable_help="""
+            If defer is set, expect standard defer behaviour.
+            """,
+            default=flags.FAVOR_STATE_MODE,
         )
 
 
@@ -1073,14 +1088,6 @@ def parse_args(args, cls=DBTArgumentParser):
     )
 
     p.add_argument(
-        "--event-buffer-size",
-        dest="event_buffer_size",
-        help="""
-        Sets the max number of events to buffer in EVENT_HISTORY
-        """,
-    )
-
-    p.add_argument(
         "-q",
         "--quiet",
         action="store_true",
@@ -1154,6 +1161,8 @@ def parse_args(args, cls=DBTArgumentParser):
     _add_selection_arguments(run_sub, compile_sub, generate_sub, test_sub, snapshot_sub, seed_sub)
     # --defer
     _add_defer_argument(run_sub, test_sub, build_sub, snapshot_sub, compile_sub)
+    # --favor-state
+    _add_favor_state_argument(run_sub, test_sub, build_sub, snapshot_sub)
     # --full-refresh
     _add_table_mutability_arguments(run_sub, compile_sub, build_sub)
 

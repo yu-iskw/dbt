@@ -18,7 +18,7 @@ from dbt.adapters.factory import (
     get_adapter_package_names,
 )
 from dbt.helper_types import PathSet
-from dbt.events.functions import fire_event, get_invocation_id
+from dbt.events.functions import fire_event, get_invocation_id, warn_or_error
 from dbt.events.types import (
     PartialParsingFullReparseBecauseOfError,
     PartialParsingExceptionFile,
@@ -35,10 +35,10 @@ from dbt.events.types import (
     PartialParsingNotEnabled,
     ParsedFileLoadFailed,
     PartialParseSaveFileNotFound,
-    InvalidDisabledSourceInTestNode,
-    InvalidRefInTestNode,
+    InvalidDisabledTargetInTestNode,
     PartialParsingProjectEnvVarsChanged,
     PartialParsingProfileEnvVarsChanged,
+    NodeNotFoundOrDisabled,
 )
 from dbt.logger import DbtProcessState
 from dbt.node_types import NodeType
@@ -53,7 +53,6 @@ from dbt.context.providers import ParseProvider
 from dbt.contracts.files import FileHash, ParseFileType, SchemaSourceFile
 from dbt.parser.read_files import read_files, load_source_file
 from dbt.parser.partial import PartialParsing, special_override_macros
-from dbt.contracts.graph.compiled import ManifestNode
 from dbt.contracts.graph.manifest import (
     Manifest,
     Disabled,
@@ -61,22 +60,18 @@ from dbt.contracts.graph.manifest import (
     ManifestStateCheck,
     ParsingInfo,
 )
-from dbt.contracts.graph.parsed import (
-    ParsedSourceDefinition,
-    ParsedNode,
-    ParsedMacro,
+from dbt.contracts.graph.nodes import (
+    SourceDefinition,
+    Macro,
     ColumnInfo,
-    ParsedExposure,
-    ParsedMetric,
+    Exposure,
+    Metric,
+    SeedNode,
+    ManifestNode,
+    ResultNode,
 )
 from dbt.contracts.util import Writable
-from dbt.exceptions import (
-    ref_target_not_found,
-    get_target_not_found_or_disabled_msg,
-    target_not_found,
-    get_not_found_or_disabled_msg,
-    warn_or_error,
-)
+from dbt.exceptions import TargetNotFound, AmbiguousAlias
 from dbt.parser.base import Parser
 from dbt.parser.analysis import AnalysisParser
 from dbt.parser.generic_test import GenericTestParser
@@ -90,7 +85,6 @@ from dbt.parser.search import FileBlock
 from dbt.parser.seeds import SeedParser
 from dbt.parser.snapshots import SnapshotParser
 from dbt.parser.sources import SourcePatcher
-from dbt.ui import warning_tag
 from dbt.version import __version__
 
 from dbt.dataclass_schema import StrEnum, dbtClassMixin
@@ -371,7 +365,7 @@ class ManifestLoader:
             self._perf_info.parse_project_elapsed = time.perf_counter() - start_parse_projects
 
             # patch_sources converts the UnparsedSourceDefinitions in the
-            # Manifest.sources to ParsedSourceDefinition via 'patch_source'
+            # Manifest.sources to SourceDefinition via 'patch_source'
             # in SourcePatcher
             start_patch = time.perf_counter()
             patcher = SourcePatcher(self.root_project, self.manifest)
@@ -542,7 +536,9 @@ class ManifestLoader:
                     macro.depends_on.add_macro(dep_macro_id)  # will check for dupes
 
     def write_manifest_for_partial_parse(self):
-        path = os.path.join(self.root_project.target_path, PARTIAL_PARSE_FILE_NAME)
+        path = os.path.join(
+            self.root_project.project_root, self.root_project.target_path, PARTIAL_PARSE_FILE_NAME
+        )
         try:
             # This shouldn't be necessary, but we have gotten bug reports (#3757) of the
             # saved manifest not matching the code version.
@@ -708,7 +704,7 @@ class ManifestLoader:
         vars_hash = FileHash.from_contents(
             "\x00".join(
                 [
-                    getattr(config.args, "vars", "{}") or "{}",
+                    str(getattr(config.args, "vars", "{}") or "{}"),
                     getattr(config.args, "profile", "") or "",
                     getattr(config.args, "target", "") or "",
                     __version__,
@@ -856,6 +852,10 @@ class ManifestLoader:
             if metric.created_at < self.started_at:
                 continue
             _process_metrics_for_node(self.manifest, current_project, metric)
+        for exposure in self.manifest.exposures.values():
+            if exposure.created_at < self.started_at:
+                continue
+            _process_metrics_for_node(self.manifest, current_project, exposure)
 
     # nodes: node and column descriptions
     # sources: source and table descriptions, column descriptions
@@ -920,7 +920,7 @@ class ManifestLoader:
         for node in self.manifest.nodes.values():
             if node.resource_type == NodeType.Source:
                 continue
-            assert not isinstance(node, ParsedSourceDefinition)
+            assert not isinstance(node, SourceDefinition)
             if node.created_at < self.started_at:
                 continue
             _process_sources_for_node(self.manifest, current_project, node)
@@ -955,65 +955,43 @@ class ManifestLoader:
         self.manifest.rebuild_ref_lookup()
 
 
-def invalid_ref_fail_unless_test(node, target_model_name, target_model_package, disabled):
-
+def invalid_target_fail_unless_test(
+    node,
+    target_name: str,
+    target_kind: str,
+    target_package: Optional[str] = None,
+    disabled: Optional[bool] = None,
+):
     if node.resource_type == NodeType.Test:
-        msg = get_target_not_found_or_disabled_msg(
-            node=node,
-            target_name=target_model_name,
-            target_package=target_model_package,
-            disabled=disabled,
-        )
         if disabled:
-            fire_event(InvalidRefInTestNode(msg=msg))
+            fire_event(
+                InvalidDisabledTargetInTestNode(
+                    resource_type_title=node.resource_type.title(),
+                    unique_id=node.unique_id,
+                    original_file_path=node.original_file_path,
+                    target_kind=target_kind,
+                    target_name=target_name,
+                    target_package=target_package if target_package else "",
+                )
+            )
         else:
-            warn_or_error(msg, log_fmt=warning_tag("{}"))
+            warn_or_error(
+                NodeNotFoundOrDisabled(
+                    original_file_path=node.original_file_path,
+                    unique_id=node.unique_id,
+                    resource_type_title=node.resource_type.title(),
+                    target_name=target_name,
+                    target_kind=target_kind,
+                    target_package=target_package if target_package else "",
+                    disabled=str(disabled),
+                )
+            )
     else:
-        ref_target_not_found(
-            node,
-            target_model_name,
-            target_model_package,
-            disabled=disabled,
-        )
-
-
-def invalid_source_fail_unless_test(node, target_name, target_table_name, disabled):
-    if node.resource_type == NodeType.Test:
-        msg = get_not_found_or_disabled_msg(
+        raise TargetNotFound(
             node=node,
-            target_name=f"{target_name}.{target_table_name}",
-            target_kind="source",
-            disabled=disabled,
-        )
-        if disabled:
-            fire_event(InvalidDisabledSourceInTestNode(msg=msg))
-        else:
-            warn_or_error(msg, log_fmt=warning_tag("{}"))
-    else:
-        target_not_found(
-            node=node,
-            target_name=f"{target_name}.{target_table_name}",
-            target_kind="source",
-            disabled=disabled,
-        )
-
-
-def invalid_metric_fail_unless_test(node, target_metric_name, target_metric_package, disabled):
-
-    if node.resource_type == NodeType.Test:
-        msg = get_target_not_found_or_disabled_msg(
-            node=node,
-            target_name=target_metric_name,
-            target_package=target_metric_package,
-            disabled=disabled,
-        )
-        warn_or_error(msg, log_fmt=warning_tag("{}"))
-    else:
-        target_not_found(
-            node=node,
-            target_name=target_metric_name,
-            target_kind="metric",
-            target_package=target_metric_package,
+            target_name=target_name,
+            target_kind=target_kind,
+            target_package=target_package,
             disabled=disabled,
         )
 
@@ -1037,11 +1015,11 @@ def _check_resource_uniqueness(
 
         existing_node = names_resources.get(name)
         if existing_node is not None:
-            dbt.exceptions.raise_duplicate_resource_name(existing_node, node)
+            raise dbt.exceptions.DuplicateResourceName(existing_node, node)
 
         existing_alias = alias_resources.get(full_node_name)
         if existing_alias is not None:
-            dbt.exceptions.raise_ambiguous_alias(existing_alias, node, full_node_name)
+            raise AmbiguousAlias(node_1=existing_alias, node_2=node, duped_name=full_node_name)
 
         names_resources[name] = node
         alias_resources[full_node_name] = node
@@ -1061,7 +1039,7 @@ def _check_manifest(manifest: Manifest, config: RuntimeConfig) -> None:
 
 
 def _get_node_column(node, column_name):
-    """Given a ParsedNode, add some fields that might be missing. Return a
+    """Given a ManifestNode, add some fields that might be missing. Return a
     reference to the dict that refers to the given column, creating it if
     it doesn't yet exist.
     """
@@ -1074,7 +1052,7 @@ def _get_node_column(node, column_name):
     return column
 
 
-DocsContextCallback = Callable[[Union[ParsedNode, ParsedSourceDefinition]], Dict[str, Any]]
+DocsContextCallback = Callable[[ResultNode], Dict[str, Any]]
 
 
 # node and column descriptions
@@ -1090,7 +1068,7 @@ def _process_docs_for_node(
 # source and table descriptions, column descriptions
 def _process_docs_for_source(
     context: Dict[str, Any],
-    source: ParsedSourceDefinition,
+    source: SourceDefinition,
 ):
     table_description = source.description
     source_description = source.source_description
@@ -1106,27 +1084,22 @@ def _process_docs_for_source(
 
 
 # macro argument descriptions
-def _process_docs_for_macro(context: Dict[str, Any], macro: ParsedMacro) -> None:
+def _process_docs_for_macro(context: Dict[str, Any], macro: Macro) -> None:
     macro.description = get_rendered(macro.description, context)
     for arg in macro.arguments:
         arg.description = get_rendered(arg.description, context)
 
 
 # exposure descriptions
-def _process_docs_for_exposure(context: Dict[str, Any], exposure: ParsedExposure) -> None:
+def _process_docs_for_exposure(context: Dict[str, Any], exposure: Exposure) -> None:
     exposure.description = get_rendered(exposure.description, context)
 
 
-def _process_docs_for_metrics(context: Dict[str, Any], metric: ParsedMetric) -> None:
+def _process_docs_for_metrics(context: Dict[str, Any], metric: Metric) -> None:
     metric.description = get_rendered(metric.description, context)
 
 
-# TODO: this isn't actually referenced anywhere?
-def _process_derived_metrics(context: Dict[str, Any], metric: ParsedMetric) -> None:
-    metric.description = get_rendered(metric.description, context)
-
-
-def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposure: ParsedExposure):
+def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposure: Exposure):
     """Given a manifest and exposure in that manifest, process its refs"""
     for ref in exposure.refs:
         target_model: Optional[Union[Disabled, ManifestNode]] = None
@@ -1153,10 +1126,11 @@ def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposur
             # This may raise. Even if it doesn't, we don't want to add
             # this exposure to the graph b/c there is no destination exposure
             exposure.config.enabled = False
-            invalid_ref_fail_unless_test(
-                exposure,
-                target_model_name,
-                target_model_package,
+            invalid_target_fail_unless_test(
+                node=exposure,
+                target_name=target_model_name,
+                target_kind="node",
+                target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
             )
 
@@ -1168,7 +1142,7 @@ def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposur
         manifest.update_exposure(exposure)
 
 
-def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: ParsedMetric):
+def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: Metric):
     """Given a manifest and a metric in that manifest, process its refs"""
     for ref in metric.refs:
         target_model: Optional[Union[Disabled, ManifestNode]] = None
@@ -1195,13 +1169,13 @@ def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: P
             # This may raise. Even if it doesn't, we don't want to add
             # this metric to the graph b/c there is no destination metric
             metric.config.enabled = False
-            invalid_ref_fail_unless_test(
-                metric,
-                target_model_name,
-                target_model_package,
+            invalid_target_fail_unless_test(
+                node=metric,
+                target_name=target_model_name,
+                target_kind="node",
+                target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
             )
-
             continue
 
         target_model_id = target_model.unique_id
@@ -1211,11 +1185,17 @@ def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: P
 
 
 def _process_metrics_for_node(
-    manifest: Manifest, current_project: str, node: Union[ManifestNode, ParsedMetric]
+    manifest: Manifest,
+    current_project: str,
+    node: Union[ManifestNode, Metric, Exposure],
 ):
     """Given a manifest and a node in that manifest, process its metrics"""
+
+    if isinstance(node, SeedNode):
+        return
+
     for metric in node.metrics:
-        target_metric: Optional[Union[Disabled, ParsedMetric]] = None
+        target_metric: Optional[Union[Disabled, Metric]] = None
         target_metric_name: str
         target_metric_package: Optional[str] = None
 
@@ -1239,13 +1219,13 @@ def _process_metrics_for_node(
             # This may raise. Even if it doesn't, we don't want to add
             # this node to the graph b/c there is no destination node
             node.config.enabled = False
-            invalid_metric_fail_unless_test(
-                node,
-                target_metric_name,
-                target_metric_package,
+            invalid_target_fail_unless_test(
+                node=node,
+                target_name=target_metric_name,
+                target_kind="source",
+                target_package=target_metric_package,
                 disabled=(isinstance(target_metric, Disabled)),
             )
-
             continue
 
         target_metric_id = target_metric.unique_id
@@ -1255,6 +1235,10 @@ def _process_metrics_for_node(
 
 def _process_refs_for_node(manifest: Manifest, current_project: str, node: ManifestNode):
     """Given a manifest and a node in that manifest, process its refs"""
+
+    if isinstance(node, SeedNode):
+        return
+
     for ref in node.refs:
         target_model: Optional[Union[Disabled, ManifestNode]] = None
         target_model_name: str
@@ -1280,13 +1264,13 @@ def _process_refs_for_node(manifest: Manifest, current_project: str, node: Manif
             # This may raise. Even if it doesn't, we don't want to add
             # this node to the graph b/c there is no destination node
             node.config.enabled = False
-            invalid_ref_fail_unless_test(
-                node,
-                target_model_name,
-                target_model_package,
+            invalid_target_fail_unless_test(
+                node=node,
+                target_name=target_model_name,
+                target_kind="node",
+                target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
             )
-
             continue
 
         target_model_id = target_model.unique_id
@@ -1299,10 +1283,8 @@ def _process_refs_for_node(manifest: Manifest, current_project: str, node: Manif
         manifest.update_node(node)
 
 
-def _process_sources_for_exposure(
-    manifest: Manifest, current_project: str, exposure: ParsedExposure
-):
-    target_source: Optional[Union[Disabled, ParsedSourceDefinition]] = None
+def _process_sources_for_exposure(manifest: Manifest, current_project: str, exposure: Exposure):
+    target_source: Optional[Union[Disabled, SourceDefinition]] = None
     for source_name, table_name in exposure.sources:
         target_source = manifest.resolve_source(
             source_name,
@@ -1312,8 +1294,11 @@ def _process_sources_for_exposure(
         )
         if target_source is None or isinstance(target_source, Disabled):
             exposure.config.enabled = False
-            invalid_source_fail_unless_test(
-                exposure, source_name, table_name, disabled=(isinstance(target_source, Disabled))
+            invalid_target_fail_unless_test(
+                node=exposure,
+                target_name=f"{source_name}.{table_name}",
+                target_kind="source",
+                disabled=(isinstance(target_source, Disabled)),
             )
             continue
         target_source_id = target_source.unique_id
@@ -1321,8 +1306,8 @@ def _process_sources_for_exposure(
         manifest.update_exposure(exposure)
 
 
-def _process_sources_for_metric(manifest: Manifest, current_project: str, metric: ParsedMetric):
-    target_source: Optional[Union[Disabled, ParsedSourceDefinition]] = None
+def _process_sources_for_metric(manifest: Manifest, current_project: str, metric: Metric):
+    target_source: Optional[Union[Disabled, SourceDefinition]] = None
     for source_name, table_name in metric.sources:
         target_source = manifest.resolve_source(
             source_name,
@@ -1332,8 +1317,11 @@ def _process_sources_for_metric(manifest: Manifest, current_project: str, metric
         )
         if target_source is None or isinstance(target_source, Disabled):
             metric.config.enabled = False
-            invalid_source_fail_unless_test(
-                metric, source_name, table_name, disabled=(isinstance(target_source, Disabled))
+            invalid_target_fail_unless_test(
+                node=metric,
+                target_name=f"{source_name}.{table_name}",
+                target_kind="source",
+                disabled=(isinstance(target_source, Disabled)),
             )
             continue
         target_source_id = target_source.unique_id
@@ -1342,7 +1330,11 @@ def _process_sources_for_metric(manifest: Manifest, current_project: str, metric
 
 
 def _process_sources_for_node(manifest: Manifest, current_project: str, node: ManifestNode):
-    target_source: Optional[Union[Disabled, ParsedSourceDefinition]] = None
+
+    if isinstance(node, SeedNode):
+        return
+
+    target_source: Optional[Union[Disabled, SourceDefinition]] = None
     for source_name, table_name in node.sources:
         target_source = manifest.resolve_source(
             source_name,
@@ -1354,8 +1346,11 @@ def _process_sources_for_node(manifest: Manifest, current_project: str, node: Ma
         if target_source is None or isinstance(target_source, Disabled):
             # this folows the same pattern as refs
             node.config.enabled = False
-            invalid_source_fail_unless_test(
-                node, source_name, table_name, disabled=(isinstance(target_source, Disabled))
+            invalid_target_fail_unless_test(
+                node=node,
+                target_name=f"{source_name}.{table_name}",
+                target_kind="source",
+                disabled=(isinstance(target_source, Disabled)),
             )
             continue
         target_source_id = target_source.unique_id
@@ -1365,7 +1360,7 @@ def _process_sources_for_node(manifest: Manifest, current_project: str, node: Ma
 
 # This is called in task.rpc.sql_commands when a "dynamic" node is
 # created in the manifest, in 'add_refs'
-def process_macro(config: RuntimeConfig, manifest: Manifest, macro: ParsedMacro) -> None:
+def process_macro(config: RuntimeConfig, manifest: Manifest, macro: Macro) -> None:
     ctx = generate_runtime_docs_context(
         config,
         macro,

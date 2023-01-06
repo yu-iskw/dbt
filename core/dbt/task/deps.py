@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from dbt import flags
 
@@ -12,7 +12,9 @@ from dbt.config.renderer import DbtProjectYamlRenderer
 from dbt.config.utils import parse_cli_vars
 from dbt.deps.base import downloads_directory
 from dbt.deps.resolver import resolve_packages
+from dbt.deps.registry import RegistryPinnedPackage
 
+from dbt.events.proto_types import ListOfStrings
 from dbt.events.functions import fire_event
 from dbt.events.types import (
     DepsNoPackagesFound,
@@ -45,22 +47,27 @@ class DepsTask(BaseTask):
         super().__init__(args=args, config=None, project=project)
         self.cli_vars = cli_vars
 
-    def track_package_install(self, package_name: str, source_type: str, version: str) -> None:
+    def track_package_install(
+        self, package_name: str, source_type: str, version: Optional[str]
+    ) -> None:
         # Hub packages do not need to be hashed, as they are public
-        # Use the string 'local' for local package versions
         if source_type == "local":
             package_name = dbt.utils.md5(package_name)
             version = "local"
+        elif source_type == "tarball":
+            package_name = dbt.utils.md5(package_name)
+            version = "tarball"
         elif source_type != "hub":
             package_name = dbt.utils.md5(package_name)
             version = dbt.utils.md5(version)
+
         dbt.tracking.track_package_install(
             "deps",
             self.project.hashed_name(),
             {"name": package_name, "source": source_type, "version": version},
         )
 
-    def run(self):
+    def run(self) -> None:
         system.make_directory(self.project.packages_install_path)
         packages = self.project.packages.packages
         if not packages:
@@ -81,7 +88,7 @@ class DepsTask(BaseTask):
                 fire_event(DepsStartPackageInstall(package_name=package_name))
                 package.install(self.project, renderer)
                 fire_event(DepsInstallInfo(version_name=package.nice_version_name()))
-                if source_type == "hub":
+                if isinstance(package, RegistryPinnedPackage):
                     version_latest = package.get_version_latest()
                     if version_latest != version:
                         packages_to_upgrade.append(package_name)
@@ -96,7 +103,7 @@ class DepsTask(BaseTask):
                 )
             if packages_to_upgrade:
                 fire_event(EmptyLine())
-                fire_event(DepsNotifyUpdatesAvailable(packages=packages_to_upgrade))
+                fire_event(DepsNotifyUpdatesAvailable(packages=ListOfStrings(packages_to_upgrade)))
 
     @classmethod
     def _get_unset_profile(cls) -> UnsetProfile:

@@ -3,31 +3,41 @@ import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, Optional, Mapping, Iterator, Iterable, Tuple, List, MutableSet, Type
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    Mapping,
+    MutableSet,
+    Optional,
+    Tuple,
+    Type,
+)
 
-from .profile import Profile
-from .project import Project
-from .renderer import DbtProjectYamlRenderer, ProfileRenderer
 from dbt import flags
-from dbt.adapters.factory import get_relation_class_by_name, get_include_paths
-from dbt.helper_types import FQNPath, PathSet, DictDefaultEmptyStr
+from dbt.adapters.factory import get_include_paths, get_relation_class_by_name
 from dbt.config.profile import read_user_config
 from dbt.config.project import load_raw_project
 from dbt.contracts.connection import AdapterRequiredConfig, Credentials, HasCredentials
 from dbt.contracts.graph.manifest import ManifestMetadata
-from dbt.contracts.relation import ComponentName
-from dbt.ui import warning_tag
-
 from dbt.contracts.project import Configuration, UserConfig
-from dbt.exceptions import (
-    RuntimeException,
-    DbtProjectError,
-    validator_error_message,
-    warn_or_error,
-    raise_compiler_error,
-)
-
+from dbt.contracts.relation import ComponentName
 from dbt.dataclass_schema import ValidationError
+from dbt.exceptions import (
+    ConfigContractBroken,
+    DbtProjectError,
+    NonUniquePackageName,
+    RuntimeException,
+    UninstalledPackagesFound,
+)
+from dbt.events.functions import warn_or_error
+from dbt.events.types import UnusedResourceConfigPath
+from dbt.helper_types import DictDefaultEmptyStr, FQNPath, PathSet
+
+from .profile import Profile
+from .project import Project
+from .renderer import DbtProjectYamlRenderer, ProfileRenderer
 
 
 def load_project(
@@ -227,7 +237,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
         try:
             Configuration.validate(self.serialize())
         except ValidationError as e:
-            raise DbtProjectError(validator_error_message(e)) from e
+            raise ConfigContractBroken(e) from e
 
     @classmethod
     def collect_parts(cls: Type["RuntimeConfig"], args: Any) -> Tuple[Project, Profile]:
@@ -240,7 +250,7 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
             args,
         )
         project = load_project(project_root, bool(flags.VERSION_CHECK), profile, cli_vars)
-        return (project, profile)
+        return project, profile
 
     # Called in main.py, lib.py, task/base.py
     @classmethod
@@ -309,11 +319,11 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
             "exposures": self._get_config_paths(self.exposures),
         }
 
-    def get_unused_resource_config_paths(
+    def warn_for_unused_resource_config_paths(
         self,
         resource_fqns: Mapping[str, PathSet],
         disabled: PathSet,
-    ) -> List[FQNPath]:
+    ) -> None:
         """Return a list of lists of strings, where each inner list of strings
         represents a type + FQN path of a resource configuration that is not
         used.
@@ -327,23 +337,13 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
 
             for config_path in config_paths:
                 if not _is_config_used(config_path, fqns):
-                    unused_resource_config_paths.append((resource_type,) + config_path)
-        return unused_resource_config_paths
+                    resource_path = ".".join(i for i in ((resource_type,) + config_path))
+                    unused_resource_config_paths.append(resource_path)
 
-    def warn_for_unused_resource_config_paths(
-        self,
-        resource_fqns: Mapping[str, PathSet],
-        disabled: PathSet,
-    ) -> None:
-        unused = self.get_unused_resource_config_paths(resource_fqns, disabled)
-        if len(unused) == 0:
+        if len(unused_resource_config_paths) == 0:
             return
 
-        msg = UNUSED_RESOURCE_CONFIGURATION_PATH_MESSAGE.format(
-            len(unused), "\n".join("- {}".format(".".join(u)) for u in unused)
-        )
-
-        warn_or_error(msg, log_fmt=warning_tag("{}"))
+        warn_or_error(UnusedResourceConfigPath(unused_config_paths=unused_resource_config_paths))
 
     def load_dependencies(self, base_only=False) -> Mapping[str, "RuntimeConfig"]:
         if self.dependencies is None:
@@ -357,22 +357,15 @@ class RuntimeConfig(Project, Profile, AdapterRequiredConfig):
                 count_packages_specified = len(self.packages.packages)  # type: ignore
                 count_packages_installed = len(tuple(self._get_project_directories()))
                 if count_packages_specified > count_packages_installed:
-                    raise_compiler_error(
-                        f"dbt found {count_packages_specified} package(s) "
-                        f"specified in packages.yml, but only "
-                        f"{count_packages_installed} package(s) installed "
-                        f'in {self.packages_install_path}. Run "dbt deps" to '
-                        f"install package dependencies."
+                    raise UninstalledPackagesFound(
+                        count_packages_specified,
+                        count_packages_installed,
+                        self.packages_install_path,
                     )
                 project_paths = itertools.chain(internal_packages, self._get_project_directories())
             for project_name, project in self.load_projects(project_paths):
                 if project_name in all_projects:
-                    raise_compiler_error(
-                        f"dbt found more than one package with the name "
-                        f'"{project_name}" included in this project. Package '
-                        f"names must be unique in a project. Please rename "
-                        f"one of these packages."
-                    )
+                    raise NonUniquePackageName(project_name)
                 all_projects[project_name] = project
             self.dependencies = all_projects
         return self.dependencies
@@ -625,14 +618,6 @@ class UnsetProfileConfig(RuntimeConfig):
         project, profile = cls.collect_parts(args)
 
         return cls.from_parts(project=project, profile=profile, args=args)
-
-
-UNUSED_RESOURCE_CONFIGURATION_PATH_MESSAGE = """\
-Configuration paths exist in your dbt_project.yml file which do not \
-apply to any resources.
-There are {} unused configuration paths:
-{}
-"""
 
 
 def _is_config_used(path, fqns):
