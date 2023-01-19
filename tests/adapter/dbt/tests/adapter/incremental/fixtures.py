@@ -1,61 +1,4 @@
 #
-# Properties
-#
-_PROPERTIES__SCHEMA = """
-version: 2
-
-models:
-  - name: model_a
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_ignore
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_ignore_target
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_append_new_columns
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_append_new_columns_target
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_sync_all_columns
-    columns:
-      - name: id
-        tags: [column_level_tag]
-        tests:
-          - unique
-
-  - name: incremental_sync_all_columns_target
-    columns:
-      - name: id
-        tags: [column_leveL_tag]
-        tests:
-          - unique
-"""
-
-#
 # Models
 #
 _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY = """
@@ -70,7 +13,7 @@ _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY = """
 
 WITH source_data AS (SELECT * FROM {{ ref('model_a') }} )
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 {% if is_incremental() %}
 
@@ -123,7 +66,7 @@ with source_data as (
 
 )
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 select id
        ,cast(field1 as {{string_type}}) as field1
@@ -184,7 +127,7 @@ _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS = """
 
 WITH source_data AS (SELECT * FROM {{ ref('model_a') }} )
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 {% if is_incremental() %}
 
@@ -215,7 +158,7 @@ _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE = """
     )
 }}
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 WITH source_data AS (SELECT * FROM {{ ref('model_a') }} )
 
@@ -267,7 +210,7 @@ _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_TARGET = """
     config(materialized='table')
 }}
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 with source_data as (
 
@@ -293,7 +236,7 @@ _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS = """
     )
 }}
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 WITH source_data AS (SELECT * FROM {{ ref('model_a') }} )
 
@@ -327,7 +270,7 @@ with source_data as (
 
 )
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 select id
        ,cast(field1 as {{string_type}}) as field1
@@ -344,7 +287,7 @@ _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET = """
     config(materialized='table')
 }}
 
-{% set string_type = 'varchar(10)' %}
+{% set string_type = dbt.type_string() %}
 
 with source_data as (
 
@@ -359,36 +302,4 @@ select id,
        cast(CASE WHEN id <= 3 THEN NULL ELSE field4 END as {{string_type}}) AS field4
 
 from source_data
-"""
-
-#
-# Tests
-#
-
-_TESTS__SELECT_FROM_INCREMENTAL_IGNORE = """
-select * from {{ ref('incremental_ignore') }} where false
-"""
-
-_TESTS__SELECT_FROM_A = """
-select * from {{ ref('model_a') }} where false
-"""
-
-_TESTS__SELECT_FROM_INCREMENTAL_APPEND_NEW_COLUMNS_TARGET = """
-select * from {{ ref('incremental_append_new_columns_target') }} where false
-"""
-
-_TESTS__SELECT_FROM_INCREMENTAL_SYNC_ALL_COLUMNS = """
-select * from {{ ref('incremental_sync_all_columns') }} where false
-"""
-
-_TESTS__SELECT_FROM_INCREMENTAL_SYNC_ALL_COLUMNS_TARGET = """
-select * from {{ ref('incremental_sync_all_columns_target') }} where false
-"""
-
-_TESTS__SELECT_FROM_INCREMENTAL_IGNORE_TARGET = """
-select * from {{ ref('incremental_ignore_target') }} where false
-"""
-
-_TESTS__SELECT_FROM_INCREMENTAL_APPEND_NEW_COLUMNS = """
-select * from {{ ref('incremental_append_new_columns') }} where false
 """
