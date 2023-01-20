@@ -15,7 +15,9 @@ from dbt.task.deps import DepsTask
 from dbt.task.run import RunTask
 from dbt.task.test import TestTask
 from dbt.task.snapshot import SnapshotTask
+from dbt.task.seed import SeedTask
 from dbt.task.list import ListTask
+from dbt.task.freshness import FreshnessTask
 
 
 # CLI invocation
@@ -301,6 +303,7 @@ def list(ctx, **kwargs):
     return results, success
 
 
+# Alias "list" to "ls"
 ls = copy(cli.commands["list"])
 ls.hidden = True
 cli.add_command(ls, "ls")
@@ -393,10 +396,16 @@ def run_operation(ctx, **kwargs):
 @p.vars
 @p.version_check
 @requires.preflight
+@requires.profile
+@requires.project
 def seed(ctx, **kwargs):
     """Load data from csv files into your data warehouse."""
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
-    return None, True
+    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
+    task = SeedTask(ctx.obj["flags"], config)
+
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
 
 
 # dbt snapshot
@@ -450,10 +459,22 @@ def source(ctx, **kwargs):
 @p.threads
 @p.vars
 @requires.preflight
+@requires.profile
+@requires.project
 def freshness(ctx, **kwargs):
-    """Snapshots the current freshness of the project's sources"""
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
-    return None, True
+    """check the current freshness of the project's sources"""
+    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
+    task = FreshnessTask(ctx.obj["flags"], config)
+
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
+
+
+# Alias "source freshness" to "snapshot-freshness"
+snapshot_freshness = copy(cli.commands["source"].commands["freshness"])  # type: ignore
+snapshot_freshness.hidden = True
+cli.commands["source"].add_command(snapshot_freshness, "snapshot-freshness")  # type: ignore
 
 
 # dbt test
@@ -477,6 +498,8 @@ def freshness(ctx, **kwargs):
 @p.vars
 @p.version_check
 @requires.preflight
+@requires.profile
+@requires.project
 def test(ctx, **kwargs):
     """Runs tests on data in deployed models. Run this after `dbt run`"""
     config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
