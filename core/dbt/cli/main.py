@@ -18,6 +18,7 @@ from dbt.task.snapshot import SnapshotTask
 from dbt.task.seed import SeedTask
 from dbt.task.list import ListTask
 from dbt.task.freshness import FreshnessTask
+from dbt.task.run_operation import RunOperationTask
 
 
 # CLI invocation
@@ -260,6 +261,8 @@ def deps(ctx, **kwargs):
 # dbt init
 @cli.command("init")
 @click.pass_context
+# for backwards compatibility, accept 'project_name' as an optional positional argument
+@click.argument("project_name", required=False)
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -268,7 +271,7 @@ def deps(ctx, **kwargs):
 @p.vars
 @requires.preflight
 def init(ctx, **kwargs):
-    """Initialize a new DBT project."""
+    """Initialize a new dbt project."""
     click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
     return None, True
 
@@ -364,6 +367,7 @@ def run(ctx, **kwargs):
 # dbt run operation
 @cli.command("run-operation")
 @click.pass_context
+@click.argument("macro")
 @p.args
 @p.profile
 @p.profiles_dir
@@ -371,10 +375,16 @@ def run(ctx, **kwargs):
 @p.target
 @p.vars
 @requires.preflight
+@requires.profile
+@requires.project
 def run_operation(ctx, **kwargs):
     """Run the named macro with any supplied arguments."""
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
-    return None, True
+    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
+    task = RunOperationTask(ctx.obj["flags"], config)
+
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
 
 
 # dbt seed
