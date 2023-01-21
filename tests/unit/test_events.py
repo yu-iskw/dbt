@@ -383,6 +383,9 @@ sample_values = [
     FlushEventsFailure(),
     TrackingInitializeFailure(),
     RunResultWarningMessage(),
+    DebugCmdOut(),
+    DebugCmdResult(),
+    ListCmdOut(),
     # T - tests ======================
     IntegrationTestInfo(),
     IntegrationTestDebug(),
