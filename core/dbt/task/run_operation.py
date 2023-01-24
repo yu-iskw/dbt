@@ -3,12 +3,11 @@ import traceback
 
 import agate
 
-from .runnable import ManifestTask
+from .base import ConfiguredTask
 
 import dbt.exceptions
 from dbt.adapters.factory import get_adapter
 from dbt.contracts.results import RunOperationResultsArtifact
-from dbt.exceptions import InternalException
 from dbt.events.functions import fire_event
 from dbt.events.types import (
     RunningOperationCaughtError,
@@ -17,7 +16,7 @@ from dbt.events.types import (
 )
 
 
-class RunOperationTask(ManifestTask):
+class RunOperationTask(ConfiguredTask):
     def _get_macro_parts(self):
         macro_name = self.args.macro
         if "." in macro_name:
@@ -26,10 +25,6 @@ class RunOperationTask(ManifestTask):
             package_name = None
 
         return package_name, macro_name
-
-    def compile_manifest(self) -> None:
-        if self.manifest is None:
-            raise InternalException("manifest was None in compile_manifest")
 
     def _run_unsafe(self) -> agate.Table:
         adapter = get_adapter(self.config)
@@ -47,7 +42,7 @@ class RunOperationTask(ManifestTask):
 
     def run(self) -> RunOperationResultsArtifact:
         start = datetime.utcnow()
-        self._runtime_initialize()
+        self.compile_manifest()
         try:
             self._run_unsafe()
         except dbt.exceptions.Exception as exc:

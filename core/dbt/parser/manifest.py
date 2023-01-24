@@ -7,9 +7,11 @@ import traceback
 from typing import Dict, Optional, Mapping, Callable, Any, List, Type, Union, Tuple
 from itertools import chain
 import time
+import json
 
 import dbt.exceptions
 import dbt.tracking
+import dbt.utils
 import dbt.flags as flags
 
 from dbt.adapters.factory import (
@@ -20,6 +22,7 @@ from dbt.adapters.factory import (
 from dbt.helper_types import PathSet
 from dbt.events.functions import fire_event, get_invocation_id, warn_or_error
 from dbt.events.types import (
+    ParseCmdPerfInfoPath,
     PartialParsingFullReparseBecauseOfError,
     PartialParsingExceptionFile,
     PartialParsingFile,
@@ -44,7 +47,7 @@ from dbt.logger import DbtProcessState
 from dbt.node_types import NodeType
 from dbt.clients.jinja import get_rendered, MacroStack
 from dbt.clients.jinja_static import statically_extract_macro_calls
-from dbt.clients.system import make_directory
+from dbt.clients.system import make_directory, write_file
 from dbt.config import Project, RuntimeConfig
 from dbt.context.docs import generate_runtime_docs_context
 from dbt.context.macro_resolver import MacroResolver, TestMacroNamespace
@@ -89,8 +92,10 @@ from dbt.version import __version__
 
 from dbt.dataclass_schema import StrEnum, dbtClassMixin
 
+MANIFEST_FILE_NAME = "manifest.json"
 PARTIAL_PARSE_FILE_NAME = "partial_parse.msgpack"
 PARSING_STATE = DbtProcessState("parsing")
+PERF_INFO_FILE_NAME = "perf_info.json"
 
 
 class ReparseReason(StrEnum):
@@ -193,6 +198,7 @@ class ManifestLoader:
         config: RuntimeConfig,
         *,
         reset: bool = False,
+        write_perf_info=False,
     ) -> Manifest:
 
         adapter = get_adapter(config)  # type: ignore
@@ -222,6 +228,9 @@ class ManifestLoader:
             # Save performance info
             loader._perf_info.load_all_elapsed = time.perf_counter() - start_load_all
             loader.track_project_load()
+
+            if write_perf_info:
+                loader.write_perf_info(config.target_path)
 
         return manifest
 
@@ -954,6 +963,11 @@ class ManifestLoader:
 
         self.manifest.rebuild_ref_lookup()
 
+    def write_perf_info(self, target_path: str):
+        path = os.path.join(target_path, PERF_INFO_FILE_NAME)
+        write_file(path, json.dumps(self._perf_info, cls=dbt.utils.JSONEncoder, indent=4))
+        fire_event(ParseCmdPerfInfoPath(path=path))
+
 
 def invalid_target_fail_unless_test(
     node,
@@ -1378,3 +1392,8 @@ def process_node(config: RuntimeConfig, manifest: Manifest, node: ManifestNode):
     _process_refs_for_node(manifest, config.project_name, node)
     ctx = generate_runtime_docs_context(config, node, manifest, config.project_name)
     _process_docs_for_node(ctx, node)
+
+
+def write_manifest(manifest: Manifest, target_path: str):
+    path = os.path.join(target_path, MANIFEST_FILE_NAME)
+    manifest.write(path)

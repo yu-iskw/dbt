@@ -2,7 +2,7 @@ import json
 
 from dbt.contracts.graph.nodes import Exposure, SourceDefinition, Metric
 from dbt.graph import ResourceTypeSelector
-from dbt.task.runnable import GraphRunnableTask, ManifestTask
+from dbt.task.runnable import GraphRunnableTask
 from dbt.task.test import TestSelector
 from dbt.node_types import NodeType
 from dbt.events.functions import warn_or_error
@@ -40,8 +40,8 @@ class ListTask(GraphRunnableTask):
         )
     )
 
-    def __init__(self, args, config):
-        super().__init__(args, config)
+    def __init__(self, args, config, manifest):
+        super().__init__(args, config, manifest)
         if self.args.models:
             if self.args.select:
                 raise RuntimeException('"models" and "select" are mutually exclusive arguments')
@@ -132,7 +132,7 @@ class ListTask(GraphRunnableTask):
             yield node.original_file_path
 
     def run(self):
-        ManifestTask._runtime_initialize(self)
+        self.compile_manifest()
         output = self.args.output
         if output == "selector":
             generator = self.generate_selectors

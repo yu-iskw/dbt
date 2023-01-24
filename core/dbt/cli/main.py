@@ -5,7 +5,6 @@ from typing import List, Tuple, Optional
 
 import click
 from dbt.cli import requires, params as p
-from dbt.config import RuntimeConfig
 from dbt.config.project import Project
 from dbt.config.profile import Profile
 from dbt.contracts.graph.manifest import Manifest
@@ -120,10 +119,15 @@ def cli(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def build(ctx, **kwargs):
     """Run all Seeds, Models, Snapshots, and tests in DAG order"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = BuildTask(ctx.obj["flags"], config)
+    task = BuildTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -166,7 +170,6 @@ def docs(ctx, **kwargs):
 @p.models
 @p.profile
 @p.profiles_dir
-@p.project_dir
 @p.select
 @p.selector
 @p.state
@@ -178,10 +181,11 @@ def docs(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def docs_generate(ctx, **kwargs):
     """Generate the documentation website for your project"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = GenerateTask(ctx.obj["flags"], config)
+    task = GenerateTask(ctx.obj["flags"], ctx.obj["runtime_config"])
 
     results = task.run()
     success = task.interpret_results(results)
@@ -225,11 +229,18 @@ def docs_serve(ctx, **kwargs):
 @p.vars
 @p.version_check
 @requires.preflight
+@requires.profile
+@requires.project
+@requires.runtime_config
+@requires.manifest
 def compile(ctx, **kwargs):
     """Generates executable SQL from source, model, test, and analysis files. Compiled SQL files are written to the
     target/ directory."""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = CompileTask(ctx.obj["flags"], config)
+    task = CompileTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -267,7 +278,6 @@ def debug(ctx, **kwargs):
 def deps(ctx, **kwargs):
     """Pull the most recent version of the dependencies listed in packages.yml"""
     task = DepsTask(ctx.obj["flags"], ctx.obj["project"])
-
     results = task.run()
     success = task.interpret_results(results)
     return results, success
@@ -311,10 +321,15 @@ def init(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def list(ctx, **kwargs):
     """List the resources in your project"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = ListTask(ctx.obj["flags"], config)
+    task = ListTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -341,9 +356,13 @@ cli.add_command(ls, "ls")
 @p.version_check
 @p.write_manifest
 @requires.preflight
+@requires.profile
+@requires.project
+@requires.runtime_config
+@requires.manifest(write_perf_info=True)
 def parse(ctx, **kwargs):
     """Parses the project and provides information on performance"""
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
+    # manifest generation and writing happens in @requires.manifest
     return None, True
 
 
@@ -369,10 +388,15 @@ def parse(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def run(ctx, **kwargs):
     """Compile SQL and execute against the current target database."""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = RunTask(ctx.obj["flags"], config)
+    task = RunTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -392,10 +416,15 @@ def run(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def run_operation(ctx, **kwargs):
     """Run the named macro with any supplied arguments."""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = RunOperationTask(ctx.obj["flags"], config)
+    task = RunOperationTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -423,10 +452,15 @@ def run_operation(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def seed(ctx, **kwargs):
     """Load data from csv files into your data warehouse."""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = SeedTask(ctx.obj["flags"], config)
+    task = SeedTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -451,10 +485,15 @@ def seed(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def snapshot(ctx, **kwargs):
     """Execute snapshots defined in your project"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = SnapshotTask(ctx.obj["flags"], config)
+    task = SnapshotTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -486,10 +525,15 @@ def source(ctx, **kwargs):
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def freshness(ctx, **kwargs):
     """check the current freshness of the project's sources"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = FreshnessTask(ctx.obj["flags"], config)
+    task = FreshnessTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -525,10 +569,15 @@ cli.commands["source"].add_command(snapshot_freshness, "snapshot-freshness")  # 
 @requires.preflight
 @requires.profile
 @requires.project
+@requires.runtime_config
+@requires.manifest
 def test(ctx, **kwargs):
     """Runs tests on data in deployed models. Run this after `dbt run`"""
-    config = RuntimeConfig.from_parts(ctx.obj["project"], ctx.obj["profile"], ctx.obj["flags"])
-    task = TestTask(ctx.obj["flags"], config)
+    task = TestTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)

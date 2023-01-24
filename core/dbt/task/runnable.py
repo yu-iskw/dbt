@@ -1,6 +1,5 @@
 import os
 import time
-import json
 from pathlib import Path
 from abc import abstractmethod
 from concurrent.futures import as_completed
@@ -13,7 +12,6 @@ from .printer import (
     print_run_end_messages,
 )
 
-from dbt.clients.system import write_file
 from dbt.task.base import ConfiguredTask
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.factory import get_adapter
@@ -39,7 +37,6 @@ from dbt.events.types import (
     NothingToDo,
 )
 from dbt.events.contextvars import log_contextvars
-from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import SourceDefinition, ResultNode
 from dbt.contracts.results import NodeStatus, RunExecutionResult, RunningStatus
 from dbt.contracts.state import PreviousState
@@ -50,8 +47,8 @@ from dbt.exceptions import (
     FailFastException,
 )
 
-from dbt.graph import GraphQueue, NodeSelector, SelectionSpec, parse_difference, Graph
-from dbt.parser.manifest import ManifestLoader
+from dbt.graph import GraphQueue, NodeSelector, SelectionSpec, parse_difference
+from dbt.parser.manifest import write_manifest
 import dbt.tracking
 
 import dbt.exceptions
@@ -59,53 +56,15 @@ from dbt import flags
 import dbt.utils
 
 RESULT_FILE_NAME = "run_results.json"
-MANIFEST_FILE_NAME = "manifest.json"
 RUNNING_STATE = DbtProcessState("running")
 
 
-class ManifestTask(ConfiguredTask):
-    def __init__(self, args, config):
-        super().__init__(args, config)
-        self.manifest: Optional[Manifest] = None
-        self.graph: Optional[Graph] = None
-
-    def write_manifest(self):
-        if flags.WRITE_JSON:
-            path = os.path.join(self.config.target_path, MANIFEST_FILE_NAME)
-            self.manifest.write(path)
-        if os.getenv("DBT_WRITE_FILES"):
-            path = os.path.join(self.config.target_path, "files.json")
-            write_file(path, json.dumps(self.manifest.files, cls=dbt.utils.JSONEncoder, indent=4))
-
-    def load_manifest(self):
-        self.manifest = ManifestLoader.get_full_manifest(self.config)
-        self.write_manifest()
-
-    def compile_manifest(self):
-        if self.manifest is None:
-            raise InternalException("compile_manifest called before manifest was loaded")
-
-        # we cannot get adapter in init since it will break rpc #5579
-        adapter = get_adapter(self.config)
-        compiler = adapter.get_compiler()
-        self.graph = compiler.compile(self.manifest)
-
-    def _runtime_initialize(self):
-        self.load_manifest()
-
-        start_compile_manifest = time.perf_counter()
-        self.compile_manifest()
-        compile_time = time.perf_counter() - start_compile_manifest
-        if dbt.tracking.active_user is not None:
-            dbt.tracking.track_runnable_timing({"graph_compilation_elapsed": compile_time})
-
-
-class GraphRunnableTask(ManifestTask):
+class GraphRunnableTask(ConfiguredTask):
 
     MARK_DEPENDENT_ERRORS_STATUSES = [NodeStatus.Error]
 
-    def __init__(self, args, config):
-        super().__init__(args, config)
+    def __init__(self, args, config, manifest):
+        super().__init__(args, config, manifest)
         self.job_queue: Optional[GraphQueue] = None
         self._flattened_nodes: Optional[List[ResultNode]] = None
 
@@ -165,9 +124,9 @@ class GraphRunnableTask(ManifestTask):
         return selector.get_graph_queue(spec)
 
     def _runtime_initialize(self):
-        super()._runtime_initialize()
+        self.compile_manifest()
         if self.manifest is None or self.graph is None:
-            raise InternalException("_runtime_initialize never loaded the manifest and graph!")
+            raise InternalException("_runtime_initialize never loaded the graph!")
 
         self.job_queue = self.get_graph_queue()
 
@@ -490,7 +449,7 @@ class GraphRunnableTask(ManifestTask):
             )
 
         if flags.WRITE_JSON:
-            self.write_manifest()
+            write_manifest(self.manifest, self.config.target_path)
             self.write_result(result)
 
         self.task_end_messages(result.results)
