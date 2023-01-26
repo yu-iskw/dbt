@@ -9,9 +9,11 @@ from dbt.tests.util import (
 from tests.functional.persist_docs_tests.fixtures import (
     _DOCS__MY_FUN_DOCS,
     _MODELS__MISSING_COLUMN,
+    _MODELS__MODEL_USING_QUOTE_UTIL,
     _MODELS__NO_DOCS_MODEL,
     _MODELS__TABLE,
     _MODELS__VIEW,
+    _PROPERTIES__QUOTE_MODEL,
     _PROPERITES__SCHEMA_MISSING_COL,
     _PROPERTIES__SCHEMA_YML,
     _SEEDS__SEED,
@@ -148,3 +150,45 @@ class TestPersistDocsColumnMissing(BasePersistDocsTest):
         table_node = catalog_data["nodes"]["model.test.missing_column"]
         table_id_comment = table_node["columns"]["id"]["comment"]
         assert table_id_comment.startswith("test id column description")
+
+
+class TestPersistDocsColumnComment:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"quote_model.sql": _MODELS__MODEL_USING_QUOTE_UTIL}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"properties.yml": _PROPERTIES__QUOTE_MODEL}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "materialized": "table",
+                    "+persist_docs": {
+                        "relation": True,
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def run_has_comments(self, project):
+        def fixt():
+            run_dbt()
+            run_dbt(["docs", "generate"])
+            with open("target/catalog.json") as fp:
+                catalog_data = json.load(fp)
+            assert "nodes" in catalog_data
+            assert len(catalog_data["nodes"]) == 1
+            column_node = catalog_data["nodes"]["model.test.quote_model"]
+            column_comment = column_node["columns"]["2id"]["comment"]
+            assert column_comment.startswith("XXX")
+
+        return fixt
+
+    def test_postgres_comments(self, run_has_comments):
+        run_has_comments()
