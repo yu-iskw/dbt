@@ -13,6 +13,7 @@ from dbt.task.compile import CompileTask
 from dbt.task.deps import DepsTask
 from dbt.task.debug import DebugTask
 from dbt.task.run import RunTask
+from dbt.task.serve import ServeTask
 from dbt.task.test import TestTask
 from dbt.task.snapshot import SnapshotTask
 from dbt.task.seed import SeedTask
@@ -172,6 +173,7 @@ def docs(ctx, **kwargs):
 @p.models
 @p.profile
 @p.profiles_dir
+@p.project_dir
 @p.select
 @p.selector
 @p.state
@@ -187,7 +189,11 @@ def docs(ctx, **kwargs):
 @requires.manifest
 def docs_generate(ctx, **kwargs):
     """Generate the documentation website for your project"""
-    task = GenerateTask(ctx.obj["flags"], ctx.obj["runtime_config"])
+    task = GenerateTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
 
     results = task.run()
     success = task.interpret_results(results)
@@ -205,10 +211,21 @@ def docs_generate(ctx, **kwargs):
 @p.target
 @p.vars
 @requires.preflight
+@requires.profile
+@requires.project
+@requires.runtime_config
+@requires.manifest
 def docs_serve(ctx, **kwargs):
     """Serve the documentation website for your project"""
-    click.echo(f"`{inspect.stack()[0][3]}` called\n flags: {ctx.obj['flags']}")
-    return None, True
+    task = ServeTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
+
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
 
 
 # dbt compile
