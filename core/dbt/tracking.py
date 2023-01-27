@@ -24,7 +24,7 @@ from dbt.events.types import (
     SendingEvent,
     TrackingInitializeFailure,
 )
-from dbt.exceptions import FailedToConnectException, NotImplementedException
+from dbt.exceptions import FailedToConnectError, NotImplementedError
 
 sp_logger.setLevel(100)
 
@@ -451,7 +451,7 @@ def track_run(run_command=None):
     try:
         yield
         track_invocation_end(invocation_context, result_type="ok")
-    except (NotImplementedException, FailedToConnectException) as e:
+    except (NotImplementedError, FailedToConnectError) as e:
         fire_event(MainEncounteredError(exc=str(e)))
         track_invocation_end(invocation_context, result_type="error")
     except Exception:

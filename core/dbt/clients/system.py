@@ -20,11 +20,11 @@ from dbt.events.types import (
     SystemCouldNotWrite,
     SystemErrorRetrievingModTime,
     SystemExecutingCmd,
+    SystemStdOut,
+    SystemStdErr,
     SystemReportReturnCode,
-    SystemStdErrMsg,
-    SystemStdOutMsg,
 )
-from dbt.exceptions import InternalException
+from dbt.exceptions import DbtInternalError
 from dbt.utils import _connection_exception_retry as connection_exception_retry
 from pathspec import PathSpec  # type: ignore
 
@@ -115,7 +115,7 @@ def make_directory(path=None) -> None:
     exist. This function handles the case where two threads try to create
     a directory at once.
     """
-    raise InternalException(f"Can not create directory from {type(path)} ")
+    raise DbtInternalError(f"Can not create directory from {type(path)} ")
 
 
 @make_directory.register
@@ -425,7 +425,7 @@ def _interpret_oserror(exc: OSError, cwd: str, cmd: List[str]) -> NoReturn:
         _handle_posix_error(exc, cwd, cmd)
 
     # this should not be reachable, raise _something_ at least!
-    raise dbt.exceptions.InternalException(
+    raise dbt.exceptions.DbtInternalError(
         "Unhandled exception in _interpret_oserror: {}".format(exc)
     )
 
@@ -454,8 +454,8 @@ def run_cmd(cwd: str, cmd: List[str], env: Optional[Dict[str, Any]] = None) -> T
     except OSError as exc:
         _interpret_oserror(exc, cwd, cmd)
 
-    fire_event(SystemStdOutMsg(bmsg=out))
-    fire_event(SystemStdErrMsg(bmsg=err))
+    fire_event(SystemStdOut(bmsg=out))
+    fire_event(SystemStdErr(bmsg=err))
 
     if proc.returncode != 0:
         fire_event(SystemReportReturnCode(returncode=proc.returncode))

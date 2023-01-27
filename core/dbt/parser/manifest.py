@@ -7,7 +7,9 @@ import traceback
 from typing import Dict, Optional, Mapping, Callable, Any, List, Type, Union, Tuple
 from itertools import chain
 import time
+from dbt.events.base_types import EventLevel
 import json
+import pprint
 
 import dbt.exceptions
 import dbt.tracking
@@ -22,26 +24,17 @@ from dbt.adapters.factory import (
 from dbt.helper_types import PathSet
 from dbt.events.functions import fire_event, get_invocation_id, warn_or_error
 from dbt.events.types import (
+    PartialParsingErrorProcessingFile,
+    PartialParsingError,
     ParseCmdPerfInfoPath,
-    PartialParsingFullReparseBecauseOfError,
-    PartialParsingExceptionFile,
-    PartialParsingFile,
-    PartialParsingException,
     PartialParsingSkipParsing,
-    PartialParsingMacroChangeStartFullParse,
-    ManifestWrongMetadataVersion,
-    PartialParsingVersionMismatch,
-    PartialParsingFailedBecauseConfigChange,
-    PartialParsingFailedBecauseProfileChange,
-    PartialParsingFailedBecauseNewProjectDependency,
-    PartialParsingFailedBecauseHashChanged,
+    UnableToPartialParse,
     PartialParsingNotEnabled,
     ParsedFileLoadFailed,
-    PartialParseSaveFileNotFound,
     InvalidDisabledTargetInTestNode,
-    PartialParsingProjectEnvVarsChanged,
-    PartialParsingProfileEnvVarsChanged,
     NodeNotFoundOrDisabled,
+    StateCheckVarsHash,
+    Note,
 )
 from dbt.logger import DbtProcessState
 from dbt.node_types import NodeType
@@ -74,7 +67,7 @@ from dbt.contracts.graph.nodes import (
     ResultNode,
 )
 from dbt.contracts.util import Writable
-from dbt.exceptions import TargetNotFound, AmbiguousAlias
+from dbt.exceptions import TargetNotFoundError, AmbiguousAliasError
 from dbt.parser.base import Parser
 from dbt.parser.analysis import AnalysisParser
 from dbt.parser.generic_test import GenericTestParser
@@ -269,7 +262,11 @@ class ManifestLoader:
                 except Exception as exc:
                     # pp_files should still be the full set and manifest is new manifest,
                     # since get_parsing_files failed
-                    fire_event(PartialParsingFullReparseBecauseOfError())
+                    fire_event(
+                        UnableToPartialParse(
+                            reason="an error occurred. Switching to full reparse."
+                        )
+                    )
 
                     # Get traceback info
                     tb_info = traceback.format_exc()
@@ -293,10 +290,9 @@ class ManifestLoader:
                             source_file = self.manifest.files[file_id]
                         if source_file:
                             parse_file_type = source_file.parse_file_type
-                            fire_event(PartialParsingExceptionFile(file=file_id))
-                            fire_event(PartialParsingFile(file_id=source_file.file_id))
+                            fire_event(PartialParsingErrorProcessingFile(file=file_id))
                     exc_info["parse_file_type"] = parse_file_type
-                    fire_event(PartialParsingException(exc_info=exc_info))
+                    fire_event(PartialParsingError(exc_info=exc_info))
 
                     # Send event
                     if dbt.tracking.active_user is not None:
@@ -321,7 +317,11 @@ class ManifestLoader:
 
             # If we're partially parsing check that certain macros have not been changed
             if self.partially_parsing and self.skip_partial_parsing_because_of_macros():
-                fire_event(PartialParsingMacroChangeStartFullParse())
+                fire_event(
+                    UnableToPartialParse(
+                        reason="change detected to override macro. Starting full parse."
+                    )
+                )
 
                 # Get new Manifest with original file records and move over the macros
                 self.manifest = self.new_manifest  # contains newly read files
@@ -553,7 +553,7 @@ class ManifestLoader:
             # saved manifest not matching the code version.
             if self.manifest.metadata.dbt_version != __version__:
                 fire_event(
-                    ManifestWrongMetadataVersion(version=self.manifest.metadata.dbt_version)
+                    UnableToPartialParse(reason="saved manifest contained the wrong version")
                 )
                 self.manifest.metadata.dbt_version = __version__
             manifest_msgpack = self.manifest.to_msgpack()
@@ -572,35 +572,43 @@ class ManifestLoader:
 
         if manifest.metadata.dbt_version != __version__:
             # #3757 log both versions because of reports of invalid cases of mismatch.
-            fire_event(
-                PartialParsingVersionMismatch(
-                    saved_version=manifest.metadata.dbt_version, current_version=__version__
-                )
-            )
+            fire_event(UnableToPartialParse(reason="of a version mismatch"))
             # If the version is wrong, the other checks might not work
             return False, ReparseReason.version_mismatch
         if self.manifest.state_check.vars_hash != manifest.state_check.vars_hash:
-            fire_event(PartialParsingFailedBecauseConfigChange())
+            fire_event(
+                UnableToPartialParse(
+                    reason="config vars, config profile, or config target have changed"
+                )
+            )
+            fire_event(
+                Note(
+                    msg=f"previous checksum: {self.manifest.state_check.vars_hash.checksum}, current checksum: {manifest.state_check.vars_hash.checksum}"
+                ),
+                level=EventLevel.DEBUG,
+            )
             valid = False
             reparse_reason = ReparseReason.vars_changed
         if self.manifest.state_check.profile_hash != manifest.state_check.profile_hash:
             # Note: This should be made more granular. We shouldn't need to invalidate
             # partial parsing if a non-used profile section has changed.
-            fire_event(PartialParsingFailedBecauseProfileChange())
+            fire_event(UnableToPartialParse(reason="profile has changed"))
             valid = False
             reparse_reason = ReparseReason.profile_changed
         if (
             self.manifest.state_check.project_env_vars_hash
             != manifest.state_check.project_env_vars_hash
         ):
-            fire_event(PartialParsingProjectEnvVarsChanged())
+            fire_event(
+                UnableToPartialParse(reason="env vars used in dbt_project.yml have changed")
+            )
             valid = False
             reparse_reason = ReparseReason.proj_env_vars_changed
         if (
             self.manifest.state_check.profile_env_vars_hash
             != manifest.state_check.profile_env_vars_hash
         ):
-            fire_event(PartialParsingProfileEnvVarsChanged())
+            fire_event(UnableToPartialParse(reason="env vars used in profiles.yml have changed"))
             valid = False
             reparse_reason = ReparseReason.prof_env_vars_changed
 
@@ -610,7 +618,7 @@ class ManifestLoader:
             if k not in manifest.state_check.project_hashes
         }
         if missing_keys:
-            fire_event(PartialParsingFailedBecauseNewProjectDependency())
+            fire_event(UnableToPartialParse(reason="a project dependency has been added"))
             valid = False
             reparse_reason = ReparseReason.deps_changed
 
@@ -618,7 +626,7 @@ class ManifestLoader:
             if key in manifest.state_check.project_hashes:
                 old_value = manifest.state_check.project_hashes[key]
                 if new_value != old_value:
-                    fire_event(PartialParsingFailedBecauseHashChanged())
+                    fire_event(UnableToPartialParse(reason="a project config has changed"))
                     valid = False
                     reparse_reason = ReparseReason.project_config_changed
         return valid, reparse_reason
@@ -671,7 +679,9 @@ class ManifestLoader:
                 )
                 reparse_reason = ReparseReason.load_file_failure
         else:
-            fire_event(PartialParseSaveFileNotFound())
+            fire_event(
+                UnableToPartialParse(reason="saved manifest not found. Starting full parse.")
+            )
             reparse_reason = ReparseReason.file_not_found
 
         # this event is only fired if a full reparse is needed
@@ -710,14 +720,26 @@ class ManifestLoader:
         # arg vars, but since any changes to that file will cause state_check
         # to not pass, it doesn't matter.  If we move to more granular checking
         # of env_vars, that would need to change.
+        # We are using the parsed cli_vars instead of config.args.vars, in order
+        # to sort them and avoid reparsing because of ordering issues.
+        stringified_cli_vars = pprint.pformat(config.cli_vars)
         vars_hash = FileHash.from_contents(
             "\x00".join(
                 [
-                    str(getattr(config.args, "vars", "{}") or "{}"),
+                    stringified_cli_vars,
                     getattr(config.args, "profile", "") or "",
                     getattr(config.args, "target", "") or "",
                     __version__,
                 ]
+            )
+        )
+        fire_event(
+            StateCheckVarsHash(
+                checksum=vars_hash.checksum,
+                vars=stringified_cli_vars,
+                profile=config.args.profile,
+                target=config.args.target,
+                version=__version__,
             )
         )
 
@@ -975,19 +997,20 @@ def invalid_target_fail_unless_test(
     target_kind: str,
     target_package: Optional[str] = None,
     disabled: Optional[bool] = None,
+    should_warn_if_disabled: bool = True,
 ):
     if node.resource_type == NodeType.Test:
         if disabled:
-            fire_event(
-                InvalidDisabledTargetInTestNode(
-                    resource_type_title=node.resource_type.title(),
-                    unique_id=node.unique_id,
-                    original_file_path=node.original_file_path,
-                    target_kind=target_kind,
-                    target_name=target_name,
-                    target_package=target_package if target_package else "",
-                )
+            event = InvalidDisabledTargetInTestNode(
+                resource_type_title=node.resource_type.title(),
+                unique_id=node.unique_id,
+                original_file_path=node.original_file_path,
+                target_kind=target_kind,
+                target_name=target_name,
+                target_package=target_package if target_package else "",
             )
+
+            fire_event(event, EventLevel.WARN if should_warn_if_disabled else None)
         else:
             warn_or_error(
                 NodeNotFoundOrDisabled(
@@ -1001,7 +1024,7 @@ def invalid_target_fail_unless_test(
                 )
             )
     else:
-        raise TargetNotFound(
+        raise TargetNotFoundError(
             node=node,
             target_name=target_name,
             target_kind=target_kind,
@@ -1029,11 +1052,13 @@ def _check_resource_uniqueness(
 
         existing_node = names_resources.get(name)
         if existing_node is not None:
-            raise dbt.exceptions.DuplicateResourceName(existing_node, node)
+            raise dbt.exceptions.DuplicateResourceNameError(existing_node, node)
 
         existing_alias = alias_resources.get(full_node_name)
         if existing_alias is not None:
-            raise AmbiguousAlias(node_1=existing_alias, node_2=node, duped_name=full_node_name)
+            raise AmbiguousAliasError(
+                node_1=existing_alias, node_2=node, duped_name=full_node_name
+            )
 
         names_resources[name] = node
         alias_resources[full_node_name] = node
@@ -1125,7 +1150,7 @@ def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposur
         elif len(ref) == 2:
             target_model_package, target_model_name = ref
         else:
-            raise dbt.exceptions.InternalException(
+            raise dbt.exceptions.DbtInternalError(
                 f"Refs should always be 1 or 2 arguments - got {len(ref)}"
             )
 
@@ -1146,6 +1171,7 @@ def _process_refs_for_exposure(manifest: Manifest, current_project: str, exposur
                 target_kind="node",
                 target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
+                should_warn_if_disabled=False,
             )
 
             continue
@@ -1168,7 +1194,7 @@ def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: M
         elif len(ref) == 2:
             target_model_package, target_model_name = ref
         else:
-            raise dbt.exceptions.InternalException(
+            raise dbt.exceptions.DbtInternalError(
                 f"Refs should always be 1 or 2 arguments - got {len(ref)}"
             )
 
@@ -1189,6 +1215,7 @@ def _process_refs_for_metric(manifest: Manifest, current_project: str, metric: M
                 target_kind="node",
                 target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
+                should_warn_if_disabled=False,
             )
             continue
 
@@ -1218,7 +1245,7 @@ def _process_metrics_for_node(
         elif len(metric) == 2:
             target_metric_package, target_metric_name = metric
         else:
-            raise dbt.exceptions.InternalException(
+            raise dbt.exceptions.DbtInternalError(
                 f"Metric references should always be 1 or 2 arguments - got {len(metric)}"
             )
 
@@ -1263,7 +1290,7 @@ def _process_refs_for_node(manifest: Manifest, current_project: str, node: Manif
         elif len(ref) == 2:
             target_model_package, target_model_name = ref
         else:
-            raise dbt.exceptions.InternalException(
+            raise dbt.exceptions.DbtInternalError(
                 f"Refs should always be 1 or 2 arguments - got {len(ref)}"
             )
 
@@ -1284,6 +1311,7 @@ def _process_refs_for_node(manifest: Manifest, current_project: str, node: Manif
                 target_kind="node",
                 target_package=target_model_package,
                 disabled=(isinstance(target_model, Disabled)),
+                should_warn_if_disabled=False,
             )
             continue
 

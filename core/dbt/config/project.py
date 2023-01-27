@@ -21,10 +21,10 @@ from dbt.clients.yaml_helper import load_yaml_text
 from dbt.contracts.connection import QueryComment
 from dbt.exceptions import (
     DbtProjectError,
-    SemverException,
-    ProjectContractBroken,
-    ProjectContractInvalid,
-    RuntimeException,
+    SemverError,
+    ProjectContractBrokenError,
+    ProjectContractError,
+    DbtRuntimeError,
 )
 from dbt.graph import SelectionSpec
 from dbt.helper_types import NoValue
@@ -73,6 +73,11 @@ https://docs.getdbt.com/docs/package-management
 
 Validator Error:
 {error}
+"""
+
+MISSING_DBT_PROJECT_ERROR = """\
+No dbt_project.yml found at expected path {path}
+Verify that each entry within packages.yml (and their transitive dependencies) contains a file named dbt_project.yml
 """
 
 
@@ -163,9 +168,7 @@ def load_raw_project(project_root: str) -> Dict[str, Any]:
 
     # get the project.yml contents
     if not path_exists(project_yaml_filepath):
-        raise DbtProjectError(
-            "no dbt_project.yml found at expected path {}".format(project_yaml_filepath)
-        )
+        raise DbtProjectError(MISSING_DBT_PROJECT_ERROR.format(path=project_yaml_filepath))
 
     project_dict = _load_yaml(project_yaml_filepath)
 
@@ -219,7 +222,7 @@ def _get_required_version(
 
     try:
         dbt_version = _parse_versions(dbt_raw_version)
-    except SemverException as e:
+    except SemverError as e:
         raise DbtProjectError(str(e)) from e
 
     if verify_version:
@@ -332,7 +335,7 @@ class PartialProject(RenderComponents):
             ProjectContract.validate(rendered.project_dict)
             cfg = ProjectContract.from_dict(rendered.project_dict)
         except ValidationError as e:
-            raise ProjectContractInvalid(e) from e
+            raise ProjectContractError(e) from e
         # name/version are required in the Project definition, so we can assume
         # they are present
         name = cfg.name
@@ -649,7 +652,14 @@ class Project:
         try:
             ProjectContract.validate(self.to_project_config())
         except ValidationError as e:
-            raise ProjectContractBroken(e) from e
+            raise ProjectContractBrokenError(e) from e
+
+    @classmethod
+    def partial_load(cls, project_root: str, *, verify_version: bool = False) -> PartialProject:
+        return PartialProject.from_project_root(
+            project_root,
+            verify_version=verify_version,
+        )
 
     @classmethod
     def from_project_root(
@@ -667,7 +677,7 @@ class Project:
 
     def get_selector(self, name: str) -> Union[SelectionSpec, bool]:
         if name not in self.selectors:
-            raise RuntimeException(
+            raise DbtRuntimeError(
                 f"Could not find selector named {name}, expected one of {list(self.selectors)}"
             )
         return self.selectors[name]["definition"]

@@ -26,7 +26,7 @@ from dbt.logger import (
 )
 from dbt.events.functions import fire_event, warn_or_error
 from dbt.events.types import (
-    EmptyLine,
+    Formatting,
     LogCancelLine,
     DefaultSelector,
     NodeStart,
@@ -41,10 +41,10 @@ from dbt.contracts.graph.nodes import SourceDefinition, ResultNode
 from dbt.contracts.results import NodeStatus, RunExecutionResult, RunningStatus
 from dbt.contracts.state import PreviousState
 from dbt.exceptions import (
-    InternalException,
-    NotImplementedException,
-    RuntimeException,
-    FailFastException,
+    DbtInternalError,
+    NotImplementedError,
+    DbtRuntimeError,
+    FailFastError,
 )
 
 from dbt.graph import GraphQueue, NodeSelector, SelectionSpec, parse_difference
@@ -116,7 +116,11 @@ class GraphRunnableTask(ConfiguredTask):
 
     @abstractmethod
     def get_node_selector(self) -> NodeSelector:
-        raise NotImplementedException(f"get_node_selector not implemented for task {type(self)}")
+        raise NotImplementedError(f"get_node_selector not implemented for task {type(self)}")
+
+    @abstractmethod
+    def defer_to_manifest(self, adapter, selected_uids: AbstractSet[str]):
+        raise NotImplementedError(f"defer_to_manifest not implemented for task {type(self)}")
 
     def get_graph_queue(self) -> GraphQueue:
         selector = self.get_node_selector()
@@ -126,7 +130,7 @@ class GraphRunnableTask(ConfiguredTask):
     def _runtime_initialize(self):
         self.compile_manifest()
         if self.manifest is None or self.graph is None:
-            raise InternalException("_runtime_initialize never loaded the graph!")
+            raise DbtInternalError("_runtime_initialize never loaded the graph!")
 
         self.job_queue = self.get_graph_queue()
 
@@ -138,7 +142,7 @@ class GraphRunnableTask(ConfiguredTask):
             elif uid in self.manifest.sources:
                 self._flattened_nodes.append(self.manifest.sources[uid])
             else:
-                raise InternalException(
+                raise DbtInternalError(
                     f"Node selection returned {uid}, expected a node or a source"
                 )
 
@@ -148,7 +152,7 @@ class GraphRunnableTask(ConfiguredTask):
         return False
 
     def get_runner_type(self, node):
-        raise NotImplementedException("Not Implemented")
+        raise NotImplementedError("Not Implemented")
 
     def result_path(self):
         return os.path.join(self.config.target_path, RESULT_FILE_NAME)
@@ -188,10 +192,6 @@ class GraphRunnableTask(ConfiguredTask):
             status: Dict[str, str] = {}
             try:
                 result = runner.run_with_hooks(self.manifest)
-                status = runner.get_result_status(result)
-                runner.node.update_event_status(
-                    node_status=result.status, finished_at=datetime.utcnow().isoformat()
-                )
             finally:
                 finishctx = TimestampNamed("finished_at")
                 with finishctx, DbtModelState(status):
@@ -208,7 +208,7 @@ class GraphRunnableTask(ConfiguredTask):
         fail_fast = flags.FAIL_FAST
 
         if result.status in (NodeStatus.Error, NodeStatus.Fail) and fail_fast:
-            self._raise_next_tick = FailFastException(
+            self._raise_next_tick = FailFastError(
                 msg="Failing early due to test failure or runtime error",
                 result=result,
                 node=getattr(result, "node", None),
@@ -217,7 +217,7 @@ class GraphRunnableTask(ConfiguredTask):
             # if we raise inside a thread, it'll just get silently swallowed.
             # stash the error message we want here, and it will check the
             # next 'tick' - should be soon since our thread is about to finish!
-            self._raise_next_tick = RuntimeException(result.message)
+            self._raise_next_tick = DbtRuntimeError(result.message)
 
         return result
 
@@ -242,7 +242,7 @@ class GraphRunnableTask(ConfiguredTask):
     def run_queue(self, pool):
         """Given a pool, submit jobs from the queue to the pool."""
         if self.job_queue is None:
-            raise InternalException("Got to run_queue with no job queue set")
+            raise DbtInternalError("Got to run_queue with no job queue set")
 
         def callback(result):
             """Note: mark_done, at a minimum, must happen here or dbt will
@@ -251,7 +251,7 @@ class GraphRunnableTask(ConfiguredTask):
             self._handle_result(result)
 
             if self.job_queue is None:
-                raise InternalException("Got to run_queue callback with no job queue set")
+                raise DbtInternalError("Got to run_queue callback with no job queue set")
             self.job_queue.mark_done(result.node.unique_id)
 
         while not self.job_queue.empty():
@@ -293,7 +293,7 @@ class GraphRunnableTask(ConfiguredTask):
         node = result.node
 
         if self.manifest is None:
-            raise InternalException("manifest was None in _handle_result")
+            raise DbtInternalError("manifest was None in _handle_result")
 
         if isinstance(node, SourceDefinition):
             self.manifest.update_source(node)
@@ -343,13 +343,13 @@ class GraphRunnableTask(ConfiguredTask):
                 )
             )
         with TextOnly():
-            fire_event(EmptyLine())
+            fire_event(Formatting(""))
 
         pool = ThreadPool(num_threads)
         try:
             self.run_queue(pool)
 
-        except FailFastException as failure:
+        except FailFastError as failure:
             self._cancel_connections(pool)
             print_run_result_error(failure.result)
             raise
@@ -366,7 +366,7 @@ class GraphRunnableTask(ConfiguredTask):
 
     def _mark_dependent_errors(self, node_id, result, cause):
         if self.graph is None:
-            raise InternalException("graph is None in _mark_dependent_errors")
+            raise DbtInternalError("graph is None in _mark_dependent_errors")
         for dep_node_id in self.graph.get_dependent_nodes(node_id):
             self._skipped_children[dep_node_id] = cause
 
@@ -385,6 +385,7 @@ class GraphRunnableTask(ConfiguredTask):
     def before_run(self, adapter, selected_uids: AbstractSet[str]):
         with adapter.connection_named("master"):
             self.populate_adapter_cache(adapter)
+            self.defer_to_manifest(adapter, selected_uids)
 
     def after_run(self, adapter, results):
         pass
@@ -419,11 +420,11 @@ class GraphRunnableTask(ConfiguredTask):
         self._runtime_initialize()
 
         if self._flattened_nodes is None:
-            raise InternalException("after _runtime_initialize, _flattened_nodes was still None")
+            raise DbtInternalError("after _runtime_initialize, _flattened_nodes was still None")
 
         if len(self._flattened_nodes) == 0:
             with TextOnly():
-                fire_event(EmptyLine())
+                fire_event(Formatting(""))
             warn_or_error(NothingToDo())
             result = self.get_result(
                 results=[],
@@ -432,7 +433,7 @@ class GraphRunnableTask(ConfiguredTask):
             )
         else:
             with TextOnly():
-                fire_event(EmptyLine())
+                fire_event(Formatting(""))
             selected_uids = frozenset(n.unique_id for n in self._flattened_nodes)
             result = self.execute_with_hooks(selected_uids)
 
@@ -475,7 +476,7 @@ class GraphRunnableTask(ConfiguredTask):
 
     def get_model_schemas(self, adapter, selected_uids: Iterable[str]) -> Set[BaseRelation]:
         if self.manifest is None:
-            raise InternalException("manifest was None in get_model_schemas")
+            raise DbtInternalError("manifest was None in get_model_schemas")
         result: Set[BaseRelation] = set()
 
         for node in self.manifest.nodes.values():

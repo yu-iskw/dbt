@@ -5,9 +5,9 @@ from typing import List, Tuple, ClassVar, Type, TypeVar, Dict, Any, Optional
 from dbt.clients.system import write_json, read_json
 from dbt import deprecations
 from dbt.exceptions import (
-    InternalException,
-    RuntimeException,
-    IncompatibleSchemaException,
+    DbtInternalError,
+    DbtRuntimeError,
+    IncompatibleSchemaError,
 )
 from dbt.version import __version__
 from dbt.events.functions import get_invocation_id, get_metadata_vars
@@ -123,7 +123,7 @@ class Readable:
         try:
             data = read_json(path)
         except (EnvironmentError, ValueError) as exc:
-            raise RuntimeException(
+            raise DbtRuntimeError(
                 f'Could not read {cls.__name__} at "{path}" as JSON: {exc}'
             ) from exc
 
@@ -283,7 +283,7 @@ def upgrade_manifest_json(manifest: dict) -> dict:
         if "root_path" in exposure_content:
             del exposure_content["root_path"]
     for source_content in manifest.get("sources", {}).values():
-        if "root_path" in exposure_content:
+        if "root_path" in source_content:
             del source_content["root_path"]
     for macro_content in manifest.get("macros", {}).values():
         if "root_path" in macro_content:
@@ -320,7 +320,7 @@ class VersionedSchema(dbtClassMixin):
         try:
             data = read_json(path)
         except (EnvironmentError, ValueError) as exc:
-            raise RuntimeException(
+            raise DbtRuntimeError(
                 f'Could not read {cls.__name__} at "{path}" as JSON: {exc}'
             ) from exc
 
@@ -332,7 +332,7 @@ class VersionedSchema(dbtClassMixin):
                 previous_schema_version = data["metadata"]["dbt_schema_version"]
                 # cls.dbt_schema_version is a SchemaVersion object
                 if not cls.is_compatible_version(previous_schema_version):
-                    raise IncompatibleSchemaException(
+                    raise IncompatibleSchemaError(
                         expected=str(cls.dbt_schema_version),
                         found=previous_schema_version,
                     )
@@ -357,7 +357,7 @@ class ArtifactMixin(VersionedSchema, Writable, Readable):
     def validate(cls, data):
         super().validate(data)
         if cls.dbt_schema_version is None:
-            raise InternalException("Cannot call from_dict with no schema version!")
+            raise DbtInternalError("Cannot call from_dict with no schema version!")
 
 
 class Identifier(ValidatedStringMixin):

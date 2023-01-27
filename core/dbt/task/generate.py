@@ -22,7 +22,7 @@ from dbt.contracts.results import (
     ColumnMetadata,
     CatalogArtifact,
 )
-from dbt.exceptions import InternalException, AmbiguousCatalogMatch
+from dbt.exceptions import DbtInternalError, AmbiguousCatalogMatchError
 from dbt.include.global_project import DOCS_INDEX_FILE_PATH
 from dbt.events.functions import fire_event
 from dbt.events.types import (
@@ -81,7 +81,7 @@ class Catalog(Dict[CatalogKey, CatalogTable]):
                 str(data["table_name"]),
             )
         except KeyError as exc:
-            raise dbt.exceptions.CompilationException(
+            raise dbt.exceptions.CompilationError(
                 "Catalog information missing required key {} (got {})".format(exc, data)
             )
         table: CatalogTable
@@ -119,7 +119,7 @@ class Catalog(Dict[CatalogKey, CatalogTable]):
             unique_ids = source_map.get(table.key(), set())
             for unique_id in unique_ids:
                 if unique_id in sources:
-                    raise AmbiguousCatalogMatch(
+                    raise AmbiguousCatalogMatchError(
                         unique_id,
                         sources[unique_id].to_dict(omit_none=True),
                         table.to_dict(omit_none=True),
@@ -225,7 +225,7 @@ class GenerateTask(CompileTask):
                 shutil.copytree(asset_path, to_asset_path)
 
         if self.manifest is None:
-            raise InternalException("self.manifest was None in run!")
+            raise DbtInternalError("self.manifest was None in run!")
 
         adapter = get_adapter(self.config)
         with adapter.connection_named("generate_catalog"):
