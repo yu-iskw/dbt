@@ -76,6 +76,11 @@
 <p>Type: boolean</p>
 <p>Stop execution on first failure.</p>
 </section>
+<section id="build|favor_state">
+<h4>favor_state<a class="headerlink" href="#build|favor_state" title="Permalink to this heading">¶</a></h4>
+<p>Type: boolean</p>
+<p>If set, defer to the argument provided to the state flag for resolving unselected nodes, even if the node(s) exist as a database object in the current environment.</p>
+</section>
 <section id="build|full_refresh">
 <h4>full_refresh<a class="headerlink" href="#build|full_refresh" title="Permalink to this heading">¶</a></h4>
 <p>Type: boolean</p>
@@ -83,7 +88,7 @@
 </section>
 <section id="build|indirect_selection">
 <h4>indirect_selection<a class="headerlink" href="#build|indirect_selection" title="Permalink to this heading">¶</a></h4>
-<p>Type: choice: [‘eager’, ‘cautious’]</p>
+<p>Type: choice: [‘eager’, ‘cautious’, ‘buildable’]</p>
 <p>Select all tests that are adjacent to selected resources, even if they those resources have been explicitly selected.</p>
 </section>
 <section id="build|profile">
@@ -192,6 +197,11 @@
 <h4>exclude<a class="headerlink" href="#compile|exclude" title="Permalink to this heading">¶</a></h4>
 <p>Type: unknown</p>
 <p>Specify the nodes to exclude.</p>
+</section>
+<section id="compile|favor_state">
+<h4>favor_state<a class="headerlink" href="#compile|favor_state" title="Permalink to this heading">¶</a></h4>
+<p>Type: boolean</p>
+<p>If set, defer to the argument provided to the state flag for resolving unselected nodes, even if the node(s) exist as a database object in the current environment.</p>
 </section>
 <section id="compile|full_refresh">
 <h4>full_refresh<a class="headerlink" href="#compile|full_refresh" title="Permalink to this heading">¶</a></h4>
@@ -349,7 +359,7 @@
 <section id="init|skip_profile_setup">
 <h4>skip_profile_setup<a class="headerlink" href="#init|skip_profile_setup" title="Permalink to this heading">¶</a></h4>
 <p>Type: boolean</p>
-<p>Skip interative profile setup.</p>
+<p>Skip interactive profile setup.</p>
 </section>
 <section id="init|target">
 <h4>target<a class="headerlink" href="#init|target" title="Permalink to this heading">¶</a></h4>
@@ -369,7 +379,7 @@
 </section>
 <section id="list|indirect_selection">
 <h4>indirect_selection<a class="headerlink" href="#list|indirect_selection" title="Permalink to this heading">¶</a></h4>
-<p>Type: choice: [‘eager’, ‘cautious’]</p>
+<p>Type: choice: [‘eager’, ‘cautious’, ‘buildable’]</p>
 <p>Select all tests that are adjacent to selected resources, even if they those resources have been explicitly selected.</p>
 </section>
 <section id="list|models">
@@ -440,7 +450,7 @@
 </section>
 <section id="list|indirect_selection">
 <h4>indirect_selection<a class="headerlink" href="#list|indirect_selection" title="Permalink to this heading">¶</a></h4>
-<p>Type: choice: [‘eager’, ‘cautious’]</p>
+<p>Type: choice: [‘eager’, ‘cautious’, ‘buildable’]</p>
 <p>Select all tests that are adjacent to selected resources, even if they those resources have been explicitly selected.</p>
 </section>
 <section id="list|models">
@@ -559,6 +569,11 @@
 <h4>defer<a class="headerlink" href="#run|defer" title="Permalink to this heading">¶</a></h4>
 <p>Type: boolean</p>
 <p>If set, defer to the state variable for resolving unselected nodes.</p>
+</section>
+<section id="run|favor_state">
+<h4>favor_state<a class="headerlink" href="#run|favor_state" title="Permalink to this heading">¶</a></h4>
+<p>Type: boolean</p>
+<p>If set, defer to the argument provided to the state flag for resolving unselected nodes, even if the node(s) exist as a database object in the current environment.</p>
 </section>
 <section id="run|exclude">
 <h4>exclude<a class="headerlink" href="#run|exclude" title="Permalink to this heading">¶</a></h4>
@@ -757,6 +772,11 @@
 <p>Type: unknown</p>
 <p>Specify the nodes to exclude.</p>
 </section>
+<section id="snapshot|favor_state">
+<h4>favor_state<a class="headerlink" href="#snapshot|favor_state" title="Permalink to this heading">¶</a></h4>
+<p>Type: boolean</p>
+<p>If set, defer to the argument provided to the state flag for resolving unselected nodes, even if the node(s) exist as a database object in the current environment.</p>
+</section>
 <section id="snapshot|models">
 <h4>models<a class="headerlink" href="#snapshot|models" title="Permalink to this heading">¶</a></h4>
 <p>Type: unknown</p>
@@ -824,9 +844,14 @@
 <p>Type: boolean</p>
 <p>Stop execution on first failure.</p>
 </section>
+<section id="test|favor_state">
+<h4>favor_state<a class="headerlink" href="#test|favor_state" title="Permalink to this heading">¶</a></h4>
+<p>Type: boolean</p>
+<p>If set, defer to the argument provided to the state flag for resolving unselected nodes, even if the node(s) exist as a database object in the current environment.</p>
+</section>
 <section id="test|indirect_selection">
 <h4>indirect_selection<a class="headerlink" href="#test|indirect_selection" title="Permalink to this heading">¶</a></h4>
-<p>Type: choice: [‘eager’, ‘cautious’]</p>
+<p>Type: choice: [‘eager’, ‘cautious’, ‘buildable’]</p>
 <p>Select all tests that are adjacent to selected resources, even if they those resources have been explicitly selected.</p>
 </section>
 <section id="test|models">
