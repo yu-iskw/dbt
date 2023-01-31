@@ -172,7 +172,6 @@ def docs(ctx, **kwargs):
 @p.defer
 @p.exclude
 @p.favor_state
-@p.models
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -237,7 +236,6 @@ def docs_serve(ctx, **kwargs):
 @p.exclude
 @p.favor_state
 @p.full_refresh
-@p.models
 @p.parse_only
 @p.profile
 @p.profiles_dir
@@ -347,7 +345,7 @@ def init(ctx, **kwargs):
 @p.profiles_dir
 @p.project_dir
 @p.resource_type
-@p.select
+@p.raw_select
 @p.selector
 @p.state
 @p.target
@@ -408,7 +406,6 @@ def parse(ctx, **kwargs):
 @p.exclude
 @p.fail_fast
 @p.full_refresh
-@p.models
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -471,7 +468,6 @@ def run_operation(ctx, **kwargs):
 @click.pass_context
 @p.exclude
 @p.full_refresh
-@p.models
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -508,7 +504,6 @@ def seed(ctx, **kwargs):
 @p.defer
 @p.exclude
 @p.favor_state
-@p.models
 @p.profile
 @p.profiles_dir
 @p.project_dir
@@ -547,7 +542,6 @@ def source(ctx, **kwargs):
 @source.command("freshness")
 @click.pass_context
 @p.exclude
-@p.models
 @p.output_path  # TODO: Is this ok to re-use?  We have three different output params, how much can we consolidate?
 @p.profile
 @p.profiles_dir
@@ -590,7 +584,6 @@ cli.commands["source"].add_command(snapshot_freshness, "snapshot-freshness")  # 
 @p.fail_fast
 @p.favor_state
 @p.indirect_selection
-@p.models
 @p.profile
 @p.profiles_dir
 @p.project_dir
