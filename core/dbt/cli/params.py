@@ -132,7 +132,7 @@ log_path = click.option(
     "--log-path",
     envvar="DBT_LOG_PATH",
     help="Configure the 'log-path'. Only applies this setting for the current run. Overrides the 'DBT_LOG_PATH' if it is set.",
-    default=lambda: Path.cwd() / "logs",
+    default=None,
     type=click.Path(resolve_path=True, path_type=Path),
 )
 
@@ -415,7 +415,7 @@ warn_error = click.option(
 warn_error_options = click.option(
     "--warn-error-options",
     envvar="DBT_WARN_ERROR_OPTIONS",
-    default=None,
+    default="{}",
     help="""If dbt would normally warn, instead raise an exception based on include/exclude configuration. Examples include --select that selects nothing, deprecations, configurations with no associated models, invalid test configurations,
     and missing sources/refs in tests. This argument should be a YAML string, with keys 'include' or 'exclude'. eg. '{"include": "all", "exclude": ["NoNodesForSelectionCriteria"]}'""",
     type=WarnErrorOptionsType(),
