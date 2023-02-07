@@ -28,7 +28,6 @@ from dbt.flags import set_from_args
 from .utils import normalize
 
 INITIAL_ROOT = os.getcwd()
-# Skip due to interface for config updated
 
 
 @contextmanager

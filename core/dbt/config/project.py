@@ -378,8 +378,8 @@ class PartialProject(RenderComponents):
 
         flag_target_path = str(flags.TARGET_PATH) if flags.TARGET_PATH else None
         target_path: str = flag_or(flag_target_path, cfg.target_path, "target")
-
         log_path: str = str(flags.LOG_PATH)
+
         clean_targets: List[str] = value_or(cfg.clean_targets, [target_path])
         packages_install_path: str = value_or(cfg.packages_install_path, "dbt_packages")
         # in the default case we'll populate this once we know the adapter type
