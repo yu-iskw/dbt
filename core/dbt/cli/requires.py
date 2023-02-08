@@ -2,7 +2,7 @@ from dbt.adapters.factory import adapter_management, register_adapter
 from dbt.flags import set_flags
 from dbt.cli.flags import Flags
 from dbt.config import RuntimeConfig
-from dbt.config.runtime import load_project, load_profile
+from dbt.config.runtime import load_project, load_profile, UnsetProfile
 from dbt.events.functions import setup_event_logger
 from dbt.exceptions import DbtProjectError
 from dbt.parser.manifest import ManifestLoader, write_manifest
@@ -43,6 +43,22 @@ def preflight(func):
 
         # Adapter management
         ctx.with_resource(adapter_management())
+
+        return func(*args, **kwargs)
+
+    return update_wrapper(wrapper, func)
+
+
+# TODO: UnsetProfile is necessary for deps and clean to load a project.
+# This decorator and its usage can be removed once https://github.com/dbt-labs/dbt-core/issues/6257 is closed.
+def unset_profile(func):
+    def wrapper(*args, **kwargs):
+        ctx = args[0]
+        assert isinstance(ctx, Context)
+
+        if ctx.obj.get("profile") is None:
+            profile = UnsetProfile()
+            ctx.obj["profile"] = profile
 
         return func(*args, **kwargs)
 
