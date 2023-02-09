@@ -1,7 +1,6 @@
 import os
 import time
 from dataclasses import dataclass, field
-from mashumaro.types import SerializableType
 from typing import (
     Optional,
     Union,
@@ -13,7 +12,7 @@ from typing import (
     Iterator,
 )
 
-from dbt.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
+from mashumaro.types import SerializableType
 
 from dbt.clients.system import write_file
 from dbt.contracts.files import FileHash
@@ -35,21 +34,19 @@ from dbt.contracts.graph.unparsed import (
     MetricTime,
 )
 from dbt.contracts.util import Replaceable, AdditionalPropertiesMixin
-from dbt.events.proto_types import NodeInfo
+from dbt.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
+from dbt.events.contextvars import set_contextvars
 from dbt.events.functions import warn_or_error
-from dbt.exceptions import ParsingError
+from dbt.events.proto_types import NodeInfo
 from dbt.events.types import (
     SeedIncreased,
     SeedExceedsLimitSamePath,
     SeedExceedsLimitAndPathChanged,
     SeedExceedsLimitChecksumChanged,
 )
-from dbt.events.contextvars import set_contextvars
-from dbt import flags
+from dbt.flags import get_flags
 from dbt.node_types import ModelLanguage, NodeType
 from dbt.utils import cast_dict_to_dict_of_strings
-
-
 from .model_config import (
     NodeConfig,
     SeedConfig,
@@ -60,6 +57,7 @@ from .model_config import (
     EmptySnapshotConfig,
     SnapshotConfig,
 )
+
 
 # =====================================================================
 # This contains the classes for all of the nodes and node-like objects
@@ -483,7 +481,6 @@ class SeedNode(ParsedNode):  # No SQLDefaults!
     # seeds need the root_path because the contents are not loaded initially
     # and we need the root_path to load the seed later
     root_path: Optional[str] = None
-    depends_on: MacroDependsOn = field(default_factory=MacroDependsOn)
 
     def same_seeds(self, other: "SeedNode") -> bool:
         # for seeds, we check the hashes. If the hashes are different types,
@@ -525,39 +522,6 @@ class SeedNode(ParsedNode):  # No SQLDefaults!
         """Seeds are never empty"""
         return False
 
-    def _disallow_implicit_dependencies(self):
-        """Disallow seeds to take implicit upstream dependencies via pre/post hooks"""
-        # Seeds are root nodes in the DAG. They cannot depend on other nodes.
-        # However, it's possible to define pre- and post-hooks on seeds, and for those
-        # hooks to include {{ ref(...) }}. This worked in previous versions, but it
-        # was never officially documented or supported behavior. Let's raise an explicit error,
-        # which will surface during parsing if the user has written code such that we attempt
-        # to capture & record a ref/source/metric call on the SeedNode.
-        # For more details: https://github.com/dbt-labs/dbt-core/issues/6806
-        hooks = [f'- pre_hook: "{hook.sql}"' for hook in self.config.pre_hook] + [
-            f'- post_hook: "{hook.sql}"' for hook in self.config.post_hook
-        ]
-        hook_list = "\n".join(hooks)
-        message = f"""
-Seeds cannot depend on other nodes. dbt detected a seed with a pre- or post-hook
-that calls 'ref', 'source', or 'metric', either directly or indirectly via other macros.
-
-Error raised for '{self.unique_id}', which has these hooks defined: \n{hook_list}
-        """
-        raise ParsingError(message)
-
-    @property
-    def refs(self):
-        self._disallow_implicit_dependencies()
-
-    @property
-    def sources(self):
-        self._disallow_implicit_dependencies()
-
-    @property
-    def metrics(self):
-        self._disallow_implicit_dependencies()
-
     def same_body(self, other) -> bool:
         return self.same_seeds(other)
 
@@ -566,8 +530,8 @@ Error raised for '{self.unique_id}', which has these hooks defined: \n{hook_list
         return []
 
     @property
-    def depends_on_macros(self) -> List[str]:
-        return self.depends_on.macros
+    def depends_on_macros(self):
+        return []
 
     @property
     def extra_ctes(self):
@@ -592,7 +556,7 @@ class TestShouldStoreFailures:
     def should_store_failures(self):
         if self.config.store_failures:
             return self.config.store_failures
-        return flags.STORE_FAILURES
+        return get_flags().STORE_FAILURES
 
     @property
     def is_relational(self):

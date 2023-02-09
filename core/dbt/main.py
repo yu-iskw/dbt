@@ -1,1249 +1,227 @@
-from typing import List
-
-from dbt.logger import log_cache_events, log_manager
-
-import argparse
-import os.path
+import betterproto
+from dbt.constants import METADATA_ENV_PREFIX
+from dbt.events.base_types import BaseEvent, Cache, EventLevel, NoFile, NoStdOut, EventMsg
+from dbt.events.eventmgr import EventManager, LoggerConfig, LineFormat, NoFilter
+from dbt.events.helpers import env_secrets, scrub_secrets
+from dbt.events.types import Formatting
+from dbt.flags import get_flags
+import dbt.flags as flags_module
+from dbt.logger import GLOBAL_LOGGER, make_log_dir_if_missing
+from functools import partial
+import json
+import os
 import sys
-import traceback
-import warnings
-from contextlib import contextmanager
-from pathlib import Path
+from typing import Callable, Dict, Optional, TextIO
+import uuid
 
-import dbt.version
-from dbt.events.functions import fire_event, setup_event_logger, setup_fallback_logger, LOG_VERSION
-from dbt.events.types import (
-    EventLevel,
-    MainEncounteredError,
-    MainKeyboardInterrupt,
-    MainReportVersion,
-    MainReportArgs,
-    MainTrackingUserState,
-    MainStackTrace,
+
+LOG_VERSION = 3
+metadata_vars: Optional[Dict[str, str]] = None
+
+
+def setup_event_logger(log_path: str, log_format: str, use_colors: bool, debug: bool):
+    cleanup_event_logger()
+    make_log_dir_if_missing(log_path)
+
+    if get_flags().ENABLE_LEGACY_LOGGER:
+        EVENT_MANAGER.add_logger(_get_logbook_log_config(debug))
+    else:
+        EVENT_MANAGER.add_logger(_get_stdout_config(log_format, debug, use_colors))
+
+        if _CAPTURE_STREAM:
+            # Create second stdout logger to support test which want to know what's
+            # being sent to stdout.
+            # debug here is true because we need to capture debug events, and we pass in false in main
+            capture_config = _get_stdout_config(log_format, True, use_colors)
+            capture_config.output_stream = _CAPTURE_STREAM
+            EVENT_MANAGER.add_logger(capture_config)
+
+        # create and add the file logger to the event manager
+        EVENT_MANAGER.add_logger(
+            _get_logfile_config(os.path.join(log_path, "dbt.log"), use_colors, log_format)
+        )
+
+
+def _get_stdout_config(log_format: str, debug: bool, use_colors: bool) -> LoggerConfig:
+    fmt = LineFormat.PlainText
+    if log_format == "json":
+        fmt = LineFormat.Json
+    elif debug:
+        fmt = LineFormat.DebugText
+    level = EventLevel.DEBUG if debug else EventLevel.INFO
+    return LoggerConfig(
+        name="stdout_log",
+        level=level,
+        use_colors=use_colors,
+        line_format=fmt,
+        scrubber=env_scrubber,
+        filter=partial(
+            _stdout_filter,
+            bool(flags_module.LOG_CACHE_EVENTS),
+            debug,
+            bool(flags_module.QUIET),
+            log_format,
+        ),
+        output_stream=sys.stdout,
+    )
+
+
+def _stdout_filter(
+    log_cache_events: bool, debug_mode: bool, quiet_mode: bool, log_format: str, msg: EventMsg
+) -> bool:
+    return (
+        not isinstance(msg.data, NoStdOut)
+        and (not isinstance(msg.data, Cache) or log_cache_events)
+        and (EventLevel(msg.info.level) != EventLevel.DEBUG or debug_mode)
+        and (EventLevel(msg.info.level) == EventLevel.ERROR or not quiet_mode)
+        and not (log_format == "json" and type(msg.data) == Formatting)
+    )
+
+
+def _get_logfile_config(log_path: str, use_colors: bool, log_format: str) -> LoggerConfig:
+    return LoggerConfig(
+        name="file_log",
+        line_format=LineFormat.Json if log_format == "json" else LineFormat.DebugText,
+        use_colors=use_colors,
+        level=EventLevel.DEBUG,  # File log is *always* debug level
+        scrubber=env_scrubber,
+        filter=partial(_logfile_filter, bool(get_flags().LOG_CACHE_EVENTS), log_format),
+        output_file_name=log_path,
+    )
+
+
+def _logfile_filter(log_cache_events: bool, log_format: str, msg: EventMsg) -> bool:
+    return (
+        not isinstance(msg.data, NoFile)
+        and not (isinstance(msg.data, Cache) and not log_cache_events)
+        and not (log_format == "json" and type(msg.data) == Formatting)
+    )
+
+
+def _get_logbook_log_config(debug: bool) -> LoggerConfig:
+    # use the default one since this code should be removed when we remove logbook
+    flags = get_flags()
+    config = _get_stdout_config("", debug, bool(flags.USE_COLORS))
+    config.name = "logbook_log"
+    config.filter = NoFilter if flags.LOG_CACHE_EVENTS else lambda e: not isinstance(e.data, Cache)
+    config.logger = GLOBAL_LOGGER
+    return config
+
+
+def env_scrubber(msg: str) -> str:
+    return scrub_secrets(msg, env_secrets())
+
+
+def cleanup_event_logger():
+    # Reset to a no-op manager to release streams associated with logs. This is
+    # especially important for tests, since pytest replaces the stdout stream
+    # during test runs, and closes the stream after the test is over.
+    EVENT_MANAGER.loggers.clear()
+    EVENT_MANAGER.callbacks.clear()
+
+
+# Since dbt-rpc does not do its own log setup, and since some events can
+# currently fire before logs can be configured by setup_event_logger(), we
+# create a default configuration with default settings and no file output.
+EVENT_MANAGER: EventManager = EventManager()
+EVENT_MANAGER.add_logger(
+    _get_logbook_log_config(flags_module.DEBUG)  # type: ignore
+    if flags_module.ENABLE_LEGACY_LOGGER
+    else _get_stdout_config(flags_module.LOG_FORMAT, flags_module.DEBUG, flags_module.USE_COLORS)  # type: ignore
 )
-import dbt.flags as flags
-import dbt.task.build as build_task
-import dbt.task.clean as clean_task
-import dbt.task.compile as compile_task
-import dbt.task.debug as debug_task
-import dbt.task.deps as deps_task
-import dbt.task.freshness as freshness_task
-import dbt.task.generate as generate_task
-import dbt.task.init as init_task
-import dbt.task.list as list_task
-import dbt.task.parse as parse_task
-import dbt.task.run as run_task
-import dbt.task.run_operation as run_operation_task
-import dbt.task.seed as seed_task
-import dbt.task.serve as serve_task
-import dbt.task.snapshot as snapshot_task
-import dbt.task.test as test_task
-from dbt.profiler import profiler
-from dbt.adapters.factory import reset_adapters, cleanup_connections
 
-import dbt.tracking
-
-from dbt.utils import ExitCodes, args_to_dict
-from dbt.config.profile import read_user_config
-from dbt.exceptions import (
-    Exception as dbtException,
-    DbtInternalError,
-    NotImplementedError,
-    FailedToConnectError,
-)
+# This global, and the following two functions for capturing stdout logs are
+# an unpleasant hack we intend to remove as part of API-ification. The GitHub
+# issue #6350 was opened for that work.
+_CAPTURE_STREAM: Optional[TextIO] = None
 
 
-class DBTVersion(argparse.Action):
-    """This is very similar to the built-in argparse._Version action,
-    except it just calls dbt.version.get_version_information().
-    """
-
-    def __init__(
-        self,
-        option_strings,
-        version=None,
-        dest=argparse.SUPPRESS,
-        default=argparse.SUPPRESS,
-        help="show program's version number and exit",
-    ):
-        super().__init__(
-            option_strings=option_strings, dest=dest, default=default, nargs=0, help=help
-        )
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        formatter = argparse.RawTextHelpFormatter(prog=parser.prog)
-        formatter.add_text(dbt.version.get_version_information())
-        parser.exit(message=formatter.format_help())
+# used for integration tests
+def capture_stdout_logs(stream: TextIO):
+    global _CAPTURE_STREAM
+    _CAPTURE_STREAM = stream
 
 
-class DBTArgumentParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.register("action", "dbtversion", DBTVersion)
-
-    def add_optional_argument_inverse(
-        self,
-        name,
-        *,
-        enable_help=None,
-        disable_help=None,
-        dest=None,
-        no_name=None,
-        default=None,
-    ):
-        mutex_group = self.add_mutually_exclusive_group()
-        if not name.startswith("--"):
-            raise DbtInternalError(
-                'cannot handle optional argument without "--" prefix: ' f'got "{name}"'
-            )
-        if dest is None:
-            dest_name = name[2:].replace("-", "_")
-        else:
-            dest_name = dest
-
-        if no_name is None:
-            no_name = f"--no-{name[2:]}"
-
-        mutex_group.add_argument(
-            name,
-            action="store_const",
-            const=True,
-            dest=dest_name,
-            default=default,
-            help=enable_help,
-        )
-
-        mutex_group.add_argument(
-            f"--no-{name[2:]}",
-            action="store_const",
-            const=False,
-            dest=dest_name,
-            default=default,
-            help=disable_help,
-        )
-
-        return mutex_group
+def stop_capture_stdout_logs():
+    global _CAPTURE_STREAM
+    _CAPTURE_STREAM = None
 
 
-def main(args=None):
-    # Logbook warnings are ignored so we don't have to fork logbook to support python 3.10.
-    # This _only_ works for regular cli invocations.
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module="logbook")
-    if args is None:
-        args = sys.argv[1:]
-    with log_manager.applicationbound():
-        try:
-            results, succeeded = handle_and_check(args)
-            if succeeded:
-                exit_code = ExitCodes.Success.value
-            else:
-                exit_code = ExitCodes.ModelError.value
-
-        except KeyboardInterrupt:
-            # if the logger isn't configured yet, it will use the default logger
-            fire_event(MainKeyboardInterrupt())
-            exit_code = ExitCodes.UnhandledError.value
-
-        # This can be thrown by eg. argparse
-        except SystemExit as e:
-            exit_code = e.code
-
-        except BaseException as e:
-            fire_event(MainEncounteredError(exc=str(e)))
-            if not isinstance(e, dbtException):
-                fire_event(MainStackTrace(stack_trace=traceback.format_exc()))
-            exit_code = ExitCodes.UnhandledError.value
-
-    sys.exit(exit_code)
+# returns a dictionary representation of the event fields.
+# the message may contain secrets which must be scrubbed at the usage site.
+def msg_to_json(msg: EventMsg) -> str:
+    msg_dict = msg_to_dict(msg)
+    raw_log_line = json.dumps(msg_dict, sort_keys=True)
+    return raw_log_line
 
 
-# here for backwards compatibility
-def handle(args):
-    res, success = handle_and_check(args)
-    return res
-
-
-@contextmanager
-def adapter_management():
-    reset_adapters()
+def msg_to_dict(msg: EventMsg) -> dict:
+    msg_dict = dict()
     try:
-        yield
-    finally:
-        cleanup_connections()
-
-
-def handle_and_check(args):
-    with log_manager.applicationbound():
-        parsed = parse_args(args)
-
-        # Set flags from args, user config, and env vars
-        user_config = read_user_config(flags.PROFILES_DIR)  # This is read again later
-        flags.set_from_args(parsed, user_config)
-
-        # If the user has asked to supress non-error logging on the cli, we want to respect that as soon as possible,
-        # so that any non-error logging done before full log config is loaded and ready is filtered accordingly.
-        setup_fallback_logger(
-            bool(flags.ENABLE_LEGACY_LOGGER), EventLevel.ERROR if flags.QUIET else EventLevel.INFO
-        )
-
-        dbt.tracking.initialize_from_flags()
-        # Set log_format from flags
-        parsed.cls.set_log_format()
-
-        # we've parsed the args and set the flags - we can now decide if we're debug or not
-        if flags.DEBUG:
-            log_manager.set_debug()
-
-        profiler_enabled = False
-
-        if parsed.record_timing_info:
-            profiler_enabled = True
-
-        with profiler(enable=profiler_enabled, outfile=parsed.record_timing_info):
-
-            with adapter_management():
-
-                task, res = run_from_args(parsed)
-                success = task.interpret_results(res)
-
-            return res, success
-
-
-@contextmanager
-def track_run(task):
-    dbt.tracking.track_invocation_start(config=task.config, args=task.args)
-    try:
-        yield
-        dbt.tracking.track_invocation_end(config=task.config, args=task.args, result_type="ok")
-    except (NotImplementedError, FailedToConnectError) as e:
-        fire_event(MainEncounteredError(exc=str(e)))
-        dbt.tracking.track_invocation_end(config=task.config, args=task.args, result_type="error")
-    except Exception:
-        dbt.tracking.track_invocation_end(config=task.config, args=task.args, result_type="error")
-        raise
-    finally:
-        dbt.tracking.flush()
-
-
-def run_from_args(parsed):
-    log_cache_events(getattr(parsed, "log_cache_events", False))
-
-    # this will convert DbtConfigErrors into DbtRuntimeError
-    # task could be any one of the task objects
-    task = parsed.cls.from_args(args=parsed)
-
-    # Set up logging
-    log_path = None
-    if task.config is not None:
-        log_path = getattr(task.config, "log_path", None)
-    log_manager.set_path(log_path)
-    setup_event_logger(log_path or "logs")
-
-    # For the ListTask, filter out system report logs to allow piping ls output to jq, etc
-    if not list_task.ListTask == parsed.cls:
-        fire_event(MainReportVersion(version=str(dbt.version.installed), log_version=LOG_VERSION))
-        fire_event(MainReportArgs(args=args_to_dict(parsed)))
-
-        if dbt.tracking.active_user is not None:  # mypy appeasement, always true
-            fire_event(MainTrackingUserState(user_state=dbt.tracking.active_user.state()))
-
-    results = None
-
-    with track_run(task):
-        results = task.run()
-    return task, results
-
-
-def _build_base_subparser():
-    base_subparser = argparse.ArgumentParser(add_help=False)
-
-    base_subparser.add_argument(
-        "--project-dir",
-        default=None,
-        type=str,
-        help="""
-        Which directory to look in for the dbt_project.yml file.
-        Default is the current working directory and its parents.
-        """,
-    )
-
-    base_subparser.add_argument(
-        "--profiles-dir",
-        default=None,
-        dest="sub_profiles_dir",  # Main cli arg precedes subcommand
-        type=str,
-        help="""
-        Which directory to look in for the profiles.yml file. If not set, dbt will look in the current working directory first, then HOME/.dbt/
-        """,
-    )
-
-    base_subparser.add_argument(
-        "--profile",
-        required=False,
-        type=str,
-        help="""
-        Which profile to load. Overrides setting in dbt_project.yml.
-        """,
-    )
-
-    base_subparser.add_argument(
-        "-t",
-        "--target",
-        default=None,
-        type=str,
-        help="""
-        Which target to load for the given profile
-        """,
-    )
-
-    base_subparser.add_argument(
-        "--vars",
-        type=str,
-        default="{}",
-        help="""
-        Supply variables to the project. This argument overrides variables
-        defined in your dbt_project.yml file. This argument should be a YAML
-        string, eg. '{my_variable: my_value}'
-        """,
-    )
-
-    # if set, log all cache events. This is extremely verbose!
-    base_subparser.add_argument(
-        "--log-cache-events",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-
-    base_subparser.set_defaults(defer=None, state=None)
-    return base_subparser
-
-
-def _build_docs_subparser(subparsers, base_subparser):
-    docs_sub = subparsers.add_parser(
-        "docs",
-        help="""
-        Generate or serve the documentation website for your project.
-        """,
-    )
-    return docs_sub
-
-
-def _build_source_subparser(subparsers, base_subparser):
-    source_sub = subparsers.add_parser(
-        "source",
-        help="""
-        Manage your project's sources
-        """,
-    )
-    return source_sub
-
-
-def _build_init_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "init",
-        parents=[base_subparser],
-        help="""
-        Initialize a new DBT project.
-        """,
-    )
-    sub.add_argument(
-        "project_name",
-        nargs="?",
-        help="""
-        Name of the new DBT project.
-        """,
-    )
-    sub.add_argument(
-        "-s",
-        "--skip-profile-setup",
-        dest="skip_profile_setup",
-        action="store_true",
-        help="""
-        Skip interactive profile setup.
-        """,
-    )
-    sub.set_defaults(cls=init_task.InitTask, which="init", rpc_method=None)
-    return sub
-
-
-def _build_build_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "build",
-        parents=[base_subparser],
-        help="""
-        Run all Seeds, Models, Snapshots, and tests in DAG order
-        """,
-    )
-    sub.set_defaults(cls=build_task.BuildTask, which="build", rpc_method="build")
-    sub.add_argument(
-        "-x",
-        "--fail-fast",
-        dest="sub_fail_fast",
-        action="store_true",
-        help="""
-        Stop execution upon a first failure.
-        """,
-    )
-    sub.add_argument(
-        "--store-failures",
-        action="store_true",
-        help="""
-        Store test results (failing rows) in the database
-        """,
-    )
-    sub.add_argument(
-        "--indirect-selection",
-        choices=["eager", "cautious", "buildable"],
-        default="eager",
-        dest="indirect_selection",
-        help="""
-            Select all tests that are adjacent to selected resources,
-            even if they those resources have been explicitly selected.
-        """,
-    )
-
-    resource_values: List[str] = [str(s) for s in build_task.BuildTask.ALL_RESOURCE_VALUES] + [
-        "all"
-    ]
-    sub.add_argument(
-        "--resource-type",
-        choices=resource_values,
-        action="append",
-        default=[],
-        dest="resource_types",
-    )
-    # explicity don't support --models
-    sub.add_argument(
-        "-s",
-        "--select",
-        dest="select",
-        nargs="+",
-        help="""
-            Specify the nodes to include.
-        """,
-    )
-    _add_common_selector_arguments(sub)
-    return sub
-
-
-def _build_clean_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "clean",
-        parents=[base_subparser],
-        help="""
-        Delete all folders in the clean-targets list
-        (usually the dbt_packages and target directories.)
-        """,
-    )
-    sub.set_defaults(cls=clean_task.CleanTask, which="clean", rpc_method=None)
-    return sub
-
-
-def _build_debug_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "debug",
-        parents=[base_subparser],
-        help="""
-        Show some helpful information about dbt for debugging.
-
-        Not to be confused with the --debug option which increases verbosity.
-        """,
-    )
-    sub.add_argument(
-        "--config-dir",
-        action="store_true",
-        help="""
-        If specified, DBT will show path information for this project
-        """,
-    )
-    _add_version_check(sub)
-    sub.set_defaults(cls=debug_task.DebugTask, which="debug", rpc_method=None)
-    return sub
-
-
-def _build_deps_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "deps",
-        parents=[base_subparser],
-        help="""
-        Pull the most recent version of the dependencies listed in packages.yml
-        """,
-    )
-    sub.set_defaults(cls=deps_task.DepsTask, which="deps", rpc_method="deps")
-    return sub
-
-
-def _build_snapshot_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "snapshot",
-        parents=[base_subparser],
-        help="""
-        Execute snapshots defined in your project
-        """,
-    )
-    sub.add_argument(
-        "--threads",
-        type=int,
-        required=False,
-        help="""
-        Specify number of threads to use while snapshotting tables.
-        Overrides settings in profiles.yml.
-        """,
-    )
-    sub.set_defaults(cls=snapshot_task.SnapshotTask, which="snapshot", rpc_method="snapshot")
-    return sub
-
-
-def _add_defer_arguments(*subparsers):
-    for sub in subparsers:
-        sub.add_optional_argument_inverse(
-            "--defer",
-            enable_help="""
-            If set, defer to the state variable for resolving unselected nodes.
-            """,
-            disable_help="""
-            If set, do not defer to the state variable for resolving unselected
-            nodes.
-            """,
-            default=flags.DEFER_MODE,
-        )
-        sub.add_optional_argument_inverse(
-            "--favor-state",
-            enable_help="""
-            If set, defer to the state variable for resolving unselected nodes, even if node exist as a database object in the current environment.
-            """,
-            disable_help="""
-            If defer is set, expect standard defer behaviour.
-            """,
-            default=flags.FAVOR_STATE_MODE,
-        )
-
-
-def _build_run_subparser(subparsers, base_subparser):
-    run_sub = subparsers.add_parser(
-        "run",
-        parents=[base_subparser],
-        help="""
-        Compile SQL and execute against the current target database.
-        """,
-    )
-    run_sub.add_argument(
-        "-x",
-        "--fail-fast",
-        dest="sub_fail_fast",
-        action="store_true",
-        help="""
-        Stop execution upon a first failure.
-        """,
-    )
-
-    run_sub.set_defaults(cls=run_task.RunTask, which="run", rpc_method="run")
-    return run_sub
-
-
-def _build_compile_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "compile",
-        parents=[base_subparser],
-        help="""
-        Generates executable SQL from source, model, test, and analysis files.
-        Compiled SQL files are written to the target/ directory.
-        """,
-    )
-    sub.set_defaults(cls=compile_task.CompileTask, which="compile", rpc_method="compile")
-    sub.add_argument("--parse-only", action="store_true")
-    return sub
-
-
-def _build_parse_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "parse",
-        parents=[base_subparser],
-        help="""
-        Parses the project and provides information on performance
-        """,
-    )
-    sub.set_defaults(cls=parse_task.ParseTask, which="parse", rpc_method="parse")
-    sub.add_argument("--write-manifest", action="store_true")
-    sub.add_argument("--compile", action="store_true")
-    return sub
-
-
-def _build_docs_generate_subparser(subparsers, base_subparser):
-    # it might look like docs_sub is the correct parents entry, but that
-    # will cause weird errors about 'conflicting option strings'.
-    generate_sub = subparsers.add_parser("generate", parents=[base_subparser])
-    generate_sub.set_defaults(
-        cls=generate_task.GenerateTask, which="generate", rpc_method="docs.generate"
-    )
-    generate_sub.add_argument(
-        "--no-compile",
-        action="store_false",
-        dest="compile",
-        help="""
-        Do not run "dbt compile" as part of docs generation
-        """,
-    )
-    _add_defer_arguments(generate_sub)
-    return generate_sub
-
-
-def _add_common_selector_arguments(sub):
-    sub.add_argument(
-        "--exclude",
-        required=False,
-        nargs="+",
-        help="""
-            Specify the models to exclude.
-        """,
-    )
-    sub.add_argument(
-        "--selector",
-        dest="selector_name",
-        metavar="SELECTOR_NAME",
-        help="""
-        The selector name to use, as defined in selectors.yml
-        """,
-    )
-    sub.add_argument(
-        "--state",
-        help="""
-        If set, use the given directory as the source for json files to
-        compare with this project.
-        """,
-        type=Path,
-        default=flags.ARTIFACT_STATE_PATH,
-    )
-
-
-def _add_selection_arguments(*subparsers):
-    for sub in subparsers:
-        sub.add_argument(
-            "-m",
-            "--models",
-            dest="select",
-            nargs="+",
-            help="""
-                Specify the nodes to include.
-            """,
-        )
-        sub.add_argument(
-            "-s",
-            "--select",
-            dest="select",
-            nargs="+",
-            help="""
-                Specify the nodes to include.
-            """,
-        )
-        _add_common_selector_arguments(sub)
-
-
-def _add_table_mutability_arguments(*subparsers):
-    for sub in subparsers:
-        sub.add_argument(
-            "--full-refresh",
-            "-f",
-            action="store_true",
-            help="""
-            If specified, dbt will drop incremental models and
-            fully-recalculate the incremental table from the model definition.
-            """,
-        )
-
-
-def _add_version_check(sub):
-    sub.add_argument(
-        "--no-version-check",
-        dest="sub_version_check",  # main cli arg precedes subcommands
-        action="store_false",
-        default=None,
-        help="""
-        If set, skip ensuring dbt's version matches the one specified in
-        the dbt_project.yml file ('require-dbt-version')
-        """,
-    )
-
-
-def _add_common_arguments(*subparsers):
-    for sub in subparsers:
-        sub.add_argument(
-            "--threads",
-            type=int,
-            required=False,
-            help="""
-            Specify number of threads to use while executing models. Overrides
-            settings in profiles.yml.
-            """,
-        )
-        sub.add_argument(
-            "--target-path",
-            required=False,
-            help="""
-            Configure the 'target-path'. Only applies this setting for the
-            current run. Overrides the 'DBT_TARGET_PATH' if it is set.
-            """,
-        )
-        sub.add_argument(
-            "--log-path",
-            required=False,
-            help="""
-            Configure the 'log-path'. Only applies this setting for the
-            current run. Overrides the 'DBT_LOG_PATH' if it is set.
-            """,
-        )
-        _add_version_check(sub)
-
-
-def _build_seed_subparser(subparsers, base_subparser):
-    seed_sub = subparsers.add_parser(
-        "seed",
-        parents=[base_subparser],
-        help="""
-        Load data from csv files into your data warehouse.
-        """,
-    )
-    seed_sub.add_argument(
-        "--full-refresh",
-        "-f",
-        action="store_true",
-        help="""
-        Drop existing seed tables and recreate them
-        """,
-    )
-    seed_sub.add_argument(
-        "--show",
-        action="store_true",
-        help="""
-        Show a sample of the loaded data in the terminal
-        """,
-    )
-    seed_sub.set_defaults(cls=seed_task.SeedTask, which="seed", rpc_method="seed")
-    return seed_sub
-
-
-def _build_docs_serve_subparser(subparsers, base_subparser):
-    serve_sub = subparsers.add_parser("serve", parents=[base_subparser])
-    serve_sub.add_argument(
-        "--port",
-        default=8080,
-        type=int,
-        help="""
-        Specify the port number for the docs server.
-        """,
-    )
-    serve_sub.add_argument(
-        "--no-browser",
-        dest="open_browser",
-        action="store_false",
-    )
-    serve_sub.set_defaults(cls=serve_task.ServeTask, which="serve", rpc_method=None)
-    return serve_sub
-
-
-def _build_test_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "test",
-        parents=[base_subparser],
-        help="""
-        Runs tests on data in deployed models. Run this after `dbt run`
-        """,
-    )
-    sub.add_argument(
-        "-x",
-        "--fail-fast",
-        dest="sub_fail_fast",
-        action="store_true",
-        help="""
-        Stop execution upon a first test failure.
-        """,
-    )
-    sub.add_argument(
-        "--store-failures",
-        action="store_true",
-        help="""
-        Store test results (failing rows) in the database
-        """,
-    )
-    sub.add_argument(
-        "--indirect-selection",
-        choices=["eager", "cautious", "buildable"],
-        default="eager",
-        dest="indirect_selection",
-        help="""
-            Select all tests that are adjacent to selected resources,
-            even if they those resources have been explicitly selected.
-        """,
-    )
-
-    sub.set_defaults(cls=test_task.TestTask, which="test", rpc_method="test")
-    return sub
-
-
-def _build_source_freshness_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "freshness",
-        parents=[base_subparser],
-        help="""
-        Snapshots the current freshness of the project's sources
-        """,
-        aliases=["snapshot-freshness"],
-    )
-    sub.add_argument(
-        "-o",
-        "--output",
-        required=False,
-        help="""
-        Specify the output path for the json report. By default, outputs to
-        target/sources.json
-        """,
-    )
-    sub.add_argument(
-        "--threads",
-        type=int,
-        required=False,
-        help="""
-        Specify number of threads to use. Overrides settings in profiles.yml
-        """,
-    )
-    sub.set_defaults(
-        cls=freshness_task.FreshnessTask,
-        which="source-freshness",
-        rpc_method="source-freshness",
-    )
-    sub.add_argument(
-        "-s",
-        "--select",
-        dest="select",
-        nargs="+",
-        help="""
-            Specify the nodes to include.
-        """,
-    )
-    _add_common_selector_arguments(sub)
-    return sub
-
-
-def _build_list_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "list",
-        parents=[base_subparser],
-        help="""
-        List the resources in your project
-        """,
-        aliases=["ls"],
-    )
-    sub.set_defaults(cls=list_task.ListTask, which="list", rpc_method=None)
-    resource_values: List[str] = [str(s) for s in list_task.ListTask.ALL_RESOURCE_VALUES] + [
-        "default",
-        "all",
-    ]
-    sub.add_argument(
-        "--resource-type",
-        choices=resource_values,
-        action="append",
-        default=[],
-        dest="resource_types",
-    )
-    sub.add_argument("--output", choices=["json", "name", "path", "selector"], default="selector")
-    sub.add_argument("--output-keys")
-
-    sub.add_argument(
-        "-m",
-        "--models",
-        dest="models",
-        nargs="+",
-        help="""
-        Specify the models to select and set the resource-type to 'model'.
-        Mutually exclusive with '--select' (or '-s') and '--resource-type'
-        """,
-        metavar="SELECTOR",
-        required=False,
-    )
-    sub.add_argument(
-        "-s",
-        "--select",
-        dest="select",
-        nargs="+",
-        help="""
-            Specify the nodes to include.
-        """,
-        metavar="SELECTOR",
-        required=False,
-    )
-    sub.add_argument(
-        "--indirect-selection",
-        choices=["eager", "cautious", "buildable"],
-        default="eager",
-        dest="indirect_selection",
-        help="""
-            Select all tests that are adjacent to selected resources,
-            even if they those resources have been explicitly selected.
-        """,
-    )
-    _add_common_selector_arguments(sub)
-
-    return sub
-
-
-def _build_run_operation_subparser(subparsers, base_subparser):
-    sub = subparsers.add_parser(
-        "run-operation",
-        parents=[base_subparser],
-        help="""
-        Run the named macro with any supplied arguments.
-        """,
-    )
-    sub.add_argument(
-        "macro",
-        help="""
-        Specify the macro to invoke. dbt will call this macro with the supplied
-        arguments and then exit
-        """,
-    )
-    sub.add_argument(
-        "--args",
-        type=str,
-        default="{}",
-        help="""
-        Supply arguments to the macro. This dictionary will be mapped to the
-        keyword arguments defined in the selected macro. This argument should
-        be a YAML string, eg. '{my_variable: my_value}'
-        """,
-    )
-    sub.set_defaults(
-        cls=run_operation_task.RunOperationTask, which="run-operation", rpc_method="run-operation"
-    )
-    return sub
-
-
-def parse_args(args, cls=DBTArgumentParser):
-    p = cls(
-        prog="dbt",
-        description="""
-        An ELT tool for managing your SQL transformations and data models.
-        For more documentation on these commands, visit: docs.getdbt.com
-        """,
-        epilog="""
-        Specify one of these sub-commands and you can find more help from
-        there.
-        """,
-    )
-
-    p.add_argument(
-        "--version",
-        action="dbtversion",
-        help="""
-        Show version information
-        """,
-    )
-
-    p.add_argument(
-        "-r",
-        "--record-timing-info",
-        default=None,
-        type=str,
-        help="""
-        When this option is passed, dbt will output low-level timing stats to
-        the specified file. Example: `--record-timing-info output.profile`
-        """,
-    )
-
-    p.add_argument(
-        "-d",
-        "--debug",
-        action="store_true",
-        default=None,
-        help="""
-        Display debug logging during dbt execution. Useful for debugging and
-        making bug reports.
-        """,
-    )
-
-    p.add_argument(
-        "--log-format",
-        choices=["text", "json", "default"],
-        default=None,
-        help="""Specify the log format, overriding the command's default.""",
-    )
-
-    p.add_argument(
-        "--no-write-json",
-        action="store_false",
-        default=None,
-        dest="write_json",
-        help="""
-        If set, skip writing the manifest and run_results.json files to disk
-        """,
-    )
-    colors_flag = p.add_mutually_exclusive_group()
-    colors_flag.add_argument(
-        "--use-colors",
-        action="store_const",
-        const=True,
-        default=None,
-        dest="use_colors",
-        help="""
-        Colorize the output DBT prints to the terminal. Output is colorized by
-        default and may also be set in a profile or at the command line.
-        Mutually exclusive with --no-use-colors
-        """,
-    )
-    colors_flag.add_argument(
-        "--no-use-colors",
-        action="store_const",
-        const=False,
-        dest="use_colors",
-        help="""
-        Do not colorize the output DBT prints to the terminal. Output is
-        colorized by default and may also be set in a profile or at the
-        command line.
-        Mutually exclusive with --use-colors
-        """,
-    )
-
-    p.add_argument(
-        "--printer-width",
-        dest="printer_width",
-        help="""
-        Sets the width of terminal output
-        """,
-    )
-
-    warn_error_flag = p.add_mutually_exclusive_group()
-    warn_error_flag.add_argument(
-        "--warn-error",
-        action="store_true",
-        default=None,
-        help="""
-        If dbt would normally warn, instead raise an exception. Examples
-        include --select that selects nothing, deprecations, configurations
-        with no associated models, invalid test configurations, and missing
-        sources/refs in tests.
-        """,
-    )
-
-    warn_error_flag.add_argument(
-        "--warn-error-options",
-        default=None,
-        help="""
-        If dbt would normally warn, instead raise an exception based on
-        include/exclude configuration. Examples include --select that selects
-        nothing, deprecations, configurations with no associated models,
-        invalid test configurations, and missing sources/refs in tests.
-        This argument should be a YAML string, with keys 'include' or 'exclude'.
-        eg. '{"include": "all", "exclude": ["NoNodesForSelectionCriteria"]}'
-        """,
-    )
-
-    p.add_argument(
-        "--no-version-check",
-        dest="version_check",
-        action="store_false",
-        default=None,
-        help="""
-        If set, skip ensuring dbt's version matches the one specified in
-        the dbt_project.yml file ('require-dbt-version')
-        """,
-    )
-
-    p.add_optional_argument_inverse(
-        "--partial-parse",
-        enable_help="""
-        Allow for partial parsing by looking for and writing to a pickle file
-        in the target directory. This overrides the user configuration file.
-        """,
-        disable_help="""
-        Disallow partial parsing. This overrides the user configuration file.
-        """,
-    )
-
-    # if set, run dbt in single-threaded mode: thread count is ignored, and
-    # calls go through `map` instead of the thread pool. This is useful for
-    # getting performance information about aspects of dbt that normally run in
-    # a thread, as the profiler ignores child threads. Users should really
-    # never use this.
-    p.add_argument(
-        "--single-threaded",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-
-    # if set, will use the latest features from the static parser instead of
-    # the stable static parser.
-    p.add_argument(
-        "--use-experimental-parser",
-        action="store_true",
-        default=None,
-        help="""
-        Enables experimental parsing features.
-        """,
-    )
-
-    # if set, will disable the use of the stable static parser and instead
-    # always rely on jinja rendering.
-    p.add_argument(
-        "--no-static-parser",
-        default=None,
-        dest="static_parser",
-        action="store_false",
-        help="""
-        Disables the static parser.
-        """,
-    )
-
-    p.add_argument(
-        "--profiles-dir",
-        default=None,
-        dest="profiles_dir",
-        type=str,
-        help="""
-        Which directory to look in for the profiles.yml file. If not set, dbt will look in the current working directory first, then HOME/.dbt/
-        """,
-    )
-
-    p.add_argument(
-        "--no-anonymous-usage-stats",
-        action="store_false",
-        default=None,
-        dest="send_anonymous_usage_stats",
-        help="""
-        Do not send anonymous usage stat to dbt Labs
-        """,
-    )
-
-    p.add_argument(
-        "-x",
-        "--fail-fast",
-        dest="fail_fast",
-        action="store_true",
-        default=None,
-        help="""
-        Stop execution upon a first failure.
-        """,
-    )
-
-    p.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        default=None,
-        help="""
-        Suppress all non-error logging to stdout. Does not affect
-        {{ print() }} macro calls.
-        """,
-    )
-
-    p.add_argument(
-        "--no-print",
-        action="store_true",
-        default=None,
-        help="""
-        Suppress all {{ print() }} macro calls.
-        """,
-    )
-
-    schema_cache_flag = p.add_mutually_exclusive_group()
-    schema_cache_flag.add_argument(
-        "--cache-selected-only",
-        action="store_const",
-        const=True,
-        default=None,
-        dest="cache_selected_only",
-        help="""
-        Pre cache database objects relevant to selected resource only.
-        """,
-    )
-    schema_cache_flag.add_argument(
-        "--no-cache-selected-only",
-        action="store_const",
-        const=False,
-        dest="cache_selected_only",
-        help="""
-        Pre cache all database objects related to the project.
-        """,
-    )
-
-    subs = p.add_subparsers(title="Available sub-commands")
-
-    base_subparser = _build_base_subparser()
-
-    # make the subcommands that have their own subcommands
-    docs_sub = _build_docs_subparser(subs, base_subparser)
-    docs_subs = docs_sub.add_subparsers(title="Available sub-commands")
-    source_sub = _build_source_subparser(subs, base_subparser)
-    source_subs = source_sub.add_subparsers(title="Available sub-commands")
-
-    _build_init_subparser(subs, base_subparser)
-    _build_clean_subparser(subs, base_subparser)
-    _build_debug_subparser(subs, base_subparser)
-    _build_deps_subparser(subs, base_subparser)
-    _build_list_subparser(subs, base_subparser)
-
-    build_sub = _build_build_subparser(subs, base_subparser)
-    snapshot_sub = _build_snapshot_subparser(subs, base_subparser)
-    run_sub = _build_run_subparser(subs, base_subparser)
-    compile_sub = _build_compile_subparser(subs, base_subparser)
-    parse_sub = _build_parse_subparser(subs, base_subparser)
-    generate_sub = _build_docs_generate_subparser(docs_subs, base_subparser)
-    test_sub = _build_test_subparser(subs, base_subparser)
-    seed_sub = _build_seed_subparser(subs, base_subparser)
-    # --threads, --no-version-check
-    _add_common_arguments(
-        run_sub, compile_sub, generate_sub, test_sub, seed_sub, parse_sub, build_sub
-    )
-    # --select, --exclude
-    # list_sub sets up its own arguments.
-    _add_selection_arguments(run_sub, compile_sub, generate_sub, test_sub, snapshot_sub, seed_sub)
-    # --defer
-    _add_defer_arguments(run_sub, test_sub, build_sub, snapshot_sub, compile_sub)
-    # --full-refresh
-    _add_table_mutability_arguments(run_sub, compile_sub, build_sub)
-
-    _build_docs_serve_subparser(docs_subs, base_subparser)
-    _build_source_freshness_subparser(source_subs, base_subparser)
-    _build_run_operation_subparser(subs, base_subparser)
-
-    if len(args) == 0:
-        p.print_help()
-        sys.exit(1)
-
-    parsed = p.parse_args(args)
-
-    # profiles_dir is set before subcommands and after, so normalize
-    if hasattr(parsed, "sub_profiles_dir"):
-        if parsed.sub_profiles_dir is not None:
-            parsed.profiles_dir = parsed.sub_profiles_dir
-        delattr(parsed, "sub_profiles_dir")
-    if hasattr(parsed, "profiles_dir"):
-        if parsed.profiles_dir is None:
-            parsed.profiles_dir = flags.PROFILES_DIR
-        else:
-            parsed.profiles_dir = os.path.abspath(parsed.profiles_dir)
-            # needs to be set before the other flags, because it's needed to
-            # read the profile that contains them
-            flags.PROFILES_DIR = parsed.profiles_dir
-
-    # version_check is set before subcommands and after, so normalize
-    if hasattr(parsed, "sub_version_check"):
-        if parsed.sub_version_check is False:
-            parsed.version_check = False
-        delattr(parsed, "sub_version_check")
-
-    # fail_fast is set before subcommands and after, so normalize
-    if hasattr(parsed, "sub_fail_fast"):
-        if parsed.sub_fail_fast is True:
-            parsed.fail_fast = True
-        delattr(parsed, "sub_fail_fast")
-
-    if getattr(parsed, "project_dir", None) is not None:
-        expanded_user = os.path.expanduser(parsed.project_dir)
-        parsed.project_dir = os.path.abspath(expanded_user)
-
-    if not hasattr(parsed, "which"):
-        # the user did not provide a valid subcommand. trigger the help message
-        # and exit with a error
-        p.print_help()
-        p.exit(1)
-
-    return parsed
+        msg_dict = msg.to_dict(casing=betterproto.Casing.SNAKE, include_default_values=True)  # type: ignore
+    except AttributeError as exc:
+        event_type = type(msg).__name__
+        raise Exception(f"type {event_type} is not serializable. {str(exc)}")
+    # We don't want an empty NodeInfo in output
+    if (
+        "data" in msg_dict
+        and "node_info" in msg_dict["data"]
+        and msg_dict["data"]["node_info"]["node_name"] == ""
+    ):
+        del msg_dict["data"]["node_info"]
+    return msg_dict
+
+
+def warn_or_error(event, node=None):
+    flags = get_flags()
+    if flags.WARN_ERROR or flags.WARN_ERROR_OPTIONS.includes(type(event).__name__):
+
+        # TODO: resolve this circular import when at top
+        from dbt.exceptions import EventCompilationError
+
+        raise EventCompilationError(event.message(), node)
+    else:
+        fire_event(event)
+
+
+# an alternative to fire_event which only creates and logs the event value
+# if the condition is met. Does nothing otherwise.
+def fire_event_if(
+    conditional: bool, lazy_e: Callable[[], BaseEvent], level: EventLevel = None
+) -> None:
+    if conditional:
+        fire_event(lazy_e(), level=level)
+
+
+# top-level method for accessing the new eventing system
+# this is where all the side effects happen branched by event type
+# (i.e. - mutating the event history, printing to stdout, logging
+# to files, etc.)
+def fire_event(e: BaseEvent, level: EventLevel = None) -> None:
+    EVENT_MANAGER.fire_event(e, level=level)
+
+
+def get_metadata_vars() -> Dict[str, str]:
+    global metadata_vars
+    if metadata_vars is None:
+        metadata_vars = {
+            k[len(METADATA_ENV_PREFIX) :]: v
+            for k, v in os.environ.items()
+            if k.startswith(METADATA_ENV_PREFIX)
+        }
+    return metadata_vars
+
+
+def reset_metadata_vars() -> None:
+    global metadata_vars
+    metadata_vars = None
+
+
+def get_invocation_id() -> str:
+    return EVENT_MANAGER.invocation_id
+
+
+def set_invocation_id() -> None:
+    # This is primarily for setting the invocation_id for separate
+    # commands in the dbt servers. It shouldn't be necessary for the CLI.
+    EVENT_MANAGER.invocation_id = str(uuid.uuid4())
