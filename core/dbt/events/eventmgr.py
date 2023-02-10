@@ -88,40 +88,41 @@ class _Logger:
         self.level: EventLevel = config.level
         self.event_manager: EventManager = event_manager
         self._python_logger: Optional[logging.Logger] = config.logger
-
-        if config.output_stream is not None:
-            stream_handler = logging.StreamHandler(config.output_stream)
-            self._python_logger = self._get_python_log_for_handler(stream_handler)
+        self._stream: Optional[TextIO] = config.output_stream
 
         if config.output_file_name:
-            file_handler = RotatingFileHandler(
+            log = logging.getLogger(config.name)
+            log.setLevel(_log_level_map[config.level])
+            handler = RotatingFileHandler(
                 filename=str(config.output_file_name),
                 encoding="utf8",
                 maxBytes=10 * 1024 * 1024,  # 10 mb
                 backupCount=5,
             )
-            self._python_logger = self._get_python_log_for_handler(file_handler)
 
-    def _get_python_log_for_handler(self, handler: logging.Handler):
-        log = logging.getLogger(self.name)
-        log.setLevel(_log_level_map[self.level])
-        handler.setFormatter(logging.Formatter(fmt="%(message)s"))
-        log.handlers.clear()
-        log.addHandler(handler)
-        return log
+            handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+            log.handlers.clear()
+            log.addHandler(handler)
+
+            self._python_logger = log
 
     def create_line(self, msg: EventMsg) -> str:
         raise NotImplementedError()
 
     def write_line(self, msg: EventMsg):
         line = self.create_line(msg)
+        python_level = _log_level_map[EventLevel(msg.info.level)]
         if self._python_logger is not None:
             send_to_logger(self._python_logger, msg.info.level, line)
+        elif self._stream is not None and _log_level_map[self.level] <= python_level:
+            self._stream.write(line + "\n")
 
     def flush(self):
         if self._python_logger is not None:
             for handler in self._python_logger.handlers:
                 handler.flush()
+        elif self._stream is not None:
+            self._stream.flush()
 
 
 class _TextLogger(_Logger):
