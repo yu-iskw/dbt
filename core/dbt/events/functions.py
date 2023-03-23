@@ -9,7 +9,7 @@ from functools import partial
 import json
 import os
 import sys
-from typing import Callable, Dict, Optional, TextIO
+from typing import Callable, Dict, List, Optional, TextIO
 import uuid
 from google.protobuf.json_format import MessageToDict
 
@@ -25,9 +25,10 @@ metadata_vars: Optional[Dict[str, str]] = None
 nofile_codes = ["Z012", "Z013", "Z014", "Z015"]
 
 
-def setup_event_logger(flags) -> None:
+def setup_event_logger(flags, callbacks: List[Callable[[EventMsg], None]] = []) -> None:
     cleanup_event_logger()
     make_log_dir_if_missing(flags.LOG_PATH)
+    EVENT_MANAGER.add_callbacks(callbacks=callbacks)
 
     if ENABLE_LEGACY_LOGGER:
         EVENT_MANAGER.add_logger(
