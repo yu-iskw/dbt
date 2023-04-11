@@ -24,6 +24,7 @@ from dbt.tests.adapter.constraints.fixtures import (
     my_model_with_nulls_sql,
     my_model_incremental_with_nulls_sql,
     model_schema_yml,
+    constrained_model_schema_yml,
 )
 
 
@@ -152,6 +153,10 @@ class BaseConstraintsColumnsEqual:
             assert contract_actual_config.enforced is True
 
 
+def _normalize_whitespace(input: str) -> str:
+    return re.sub(r"\s+", " ", input).lower().strip()
+
+
 class BaseConstraintsRuntimeDdlEnforcement:
     """
     These constraints pass muster for dbt's preflight checks. Make sure they're
@@ -202,23 +207,15 @@ insert into <model_identifier> (
         # the name is not what we're testing here anyways and varies based on materialization
         # TODO: consider refactoring this to introspect logs instead
         generated_sql = read_file("target", "run", "test", "models", "my_model.sql")
-        generated_sql_modified = re.sub(r"\s+", " ", generated_sql).lower().strip()
+        generated_sql_modified = _normalize_whitespace(generated_sql)
         generated_sql_list = generated_sql_modified.split(" ")
         for idx in [n for n, x in enumerate(generated_sql_list) if "my_model" in x]:
             generated_sql_list[idx] = "<model_identifier>"
         generated_sql_generic = " ".join(generated_sql_list)
 
-        expected_sql_check = re.sub(r"\s+", " ", expected_sql).lower().strip()
+        expected_sql_check = _normalize_whitespace(expected_sql)
 
-        assert (
-            expected_sql_check == generated_sql_generic
-        ), f"""
--- GENERATED SQL
-{generated_sql_generic}
-
--- EXPECTED SQL
-{expected_sql_check}
-"""
+        assert expected_sql_check == generated_sql_generic
 
 
 class BaseConstraintsRollback:
@@ -354,4 +351,65 @@ class TestIncrementalConstraintsRuntimeDdlEnforcement(
 
 
 class TestIncrementalConstraintsRollback(BaseIncrementalConstraintsRollback):
+    pass
+
+
+class BaseModelConstraintsRuntimeEnforcement:
+    """
+    These model-level constraints pass muster for dbt's preflight checks. Make sure they're
+    passed into the DDL statement. If they don't match up with the underlying data,
+    the data platform should raise an error at runtime.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "my_model.sql": my_model_sql,
+            "constraints_schema.yml": constrained_model_schema_yml,
+        }
+
+    @pytest.fixture(scope="class")
+    def expected_sql(self):
+        return """
+create table <model_identifier> (
+    id integer not null,
+    color text,
+    date_day text,
+    check (id > 0),
+    primary key (id),
+    constraint strange_uniqueness_requirement unique (color, date_day)
+) ;
+insert into <model_identifier> (
+    id ,
+    color ,
+    date_day
+)
+(
+    select
+       id,
+       color,
+       date_day
+       from
+    (
+        select
+            1 as id,
+            'blue' as color,
+            '2019-01-01' as date_day
+    ) as model_subq
+);
+"""
+
+    def test__model_constraints_ddl(self, project, expected_sql):
+        results = run_dbt(["run", "-s", "my_model"])
+        assert len(results) == 1
+        generated_sql = read_file("target", "run", "test", "models", "my_model.sql")
+        generated_sql_list = _normalize_whitespace(generated_sql).split(" ")
+        generated_sql_list = [
+            "<model_identifier>" if "my_model" in s else s for s in generated_sql_list
+        ]
+        generated_sql_generic = " ".join(generated_sql_list)
+        assert _normalize_whitespace(expected_sql) == generated_sql_generic
+
+
+class TestModelConstraintsRuntimeEnforcement(BaseModelConstraintsRuntimeEnforcement):
     pass

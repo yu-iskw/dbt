@@ -171,6 +171,11 @@ class ColumnLevelConstraint(dbtClassMixin):
 
 
 @dataclass
+class ModelLevelConstraint(ColumnLevelConstraint):
+    columns: List[str] = field(default_factory=list)
+
+
+@dataclass
 class ColumnInfo(AdditionalPropertiesMixin, ExtensibleDbtClassMixin, Replaceable):
     """Used in all ManifestNodes and SourceDefinition"""
 
@@ -403,6 +408,9 @@ class ParsedNode(NodeInfoMixin, ParsedNodeMandatory, SerializableType):
 
     def patch(self, patch: "ParsedNodePatch"):
         """Given a ParsedNodePatch, add the new information to the node."""
+        # NOTE: Constraint patching is awkwardly done in the parse_patch function
+        # which calls this one. We need to combine the logic.
+
         # explicitly pick out the parts to update so we don't inadvertently
         # step on the model name or anything
         # Note: config should already be updated
@@ -576,6 +584,7 @@ class HookNode(CompiledNode):
 class ModelNode(CompiledNode):
     resource_type: NodeType = field(metadata={"restrict": [NodeType.Model]})
     access: AccessType = AccessType.Protected
+    constraints: List[ModelLevelConstraint] = field(default_factory=list)
 
 
 # TODO: rm?

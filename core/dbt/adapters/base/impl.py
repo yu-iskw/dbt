@@ -18,7 +18,7 @@ from typing import (
     Type,
 )
 
-from dbt.contracts.graph.nodes import ColumnLevelConstraint, ConstraintType
+from dbt.contracts.graph.nodes import ColumnLevelConstraint, ConstraintType, ModelLevelConstraint
 
 import agate
 import pytz
@@ -1297,6 +1297,44 @@ class BaseAdapter(metaclass=AdapterMeta):
             return constraint.expression
         else:
             return ""
+
+    @classmethod
+    def _parse_model_constraint(cls, raw_constraint: Dict[str, Any]) -> ModelLevelConstraint:
+        try:
+            ModelLevelConstraint.validate(raw_constraint)
+            c = ModelLevelConstraint.from_dict(raw_constraint)
+            return c
+        except Exception:
+            raise DbtValidationError(f"Could not parse constraint: {raw_constraint}")
+
+    @available
+    @classmethod
+    def render_raw_model_constraints(cls, raw_constraints: List[Dict[str, Any]]) -> List[str]:
+        return [c for c in map(cls.render_raw_model_constraint, raw_constraints) if c is not None]
+
+    @classmethod
+    def render_raw_model_constraint(cls, raw_constraint: Dict[str, Any]) -> Optional[str]:
+        constraint = cls._parse_model_constraint(raw_constraint)
+        return cls.render_model_constraint(constraint)
+
+    @classmethod
+    def render_model_constraint(cls, constraint: ModelLevelConstraint) -> Optional[str]:
+        """Render the given constraint as DDL text. Should be overriden by adapters which need custom constraint
+        rendering."""
+        constraint_prefix = f"constraint {constraint.name} " if constraint.name else ""
+        column_list = ", ".join(constraint.columns)
+        if constraint.type == ConstraintType.check and constraint.expression:
+            return f"{constraint_prefix}check {constraint.expression}"
+        elif constraint.type == ConstraintType.unique:
+            return f"{constraint_prefix}unique ({column_list})"
+        elif constraint.type == ConstraintType.primary_key:
+            return f"{constraint_prefix}primary key ({column_list})"
+        elif constraint.type == ConstraintType.foreign_key:
+            return f"{constraint_prefix}foreign key ({column_list})"
+        elif constraint.type == ConstraintType.custom and constraint.expression:
+            return f"{constraint_prefix}{constraint.expression}"
+        else:
+            return None
 
 
 COLUMNS_EQUAL_SQL = """
