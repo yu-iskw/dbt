@@ -224,8 +224,8 @@ def runtime_config(func):
 
 def manifest(*args0, write=True, write_perf_info=False):
     """A decorator used by click command functions for generating a manifest
-    given a profile, project, and runtime config. This also registers the adaper
-    from the runtime config and conditionally writes the manifest to disc.
+    given a profile, project, and runtime config. This also registers the adapter
+    from the runtime config and conditionally writes the manifest to disk.
     """
 
     def outer_wrapper(func):
