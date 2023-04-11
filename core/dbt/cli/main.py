@@ -53,7 +53,8 @@ class dbtRunnerResult:
         bool,  # debug
         CatalogArtifact,  # docs generate
         List[str],  # list/ls
-        None,  # clean, deps, init, parse, source
+        Manifest,  # parse
+        None,  # clean, deps, init, source
         RunExecutionResult,  # build, compile, run, seed, snapshot, test
         RunOperationResultsArtifact,  # run-operation
     ] = None
@@ -533,7 +534,8 @@ cli.add_command(ls, "ls")
 def parse(ctx, **kwargs):
     """Parses the project and provides information on performance"""
     # manifest generation and writing happens in @requires.manifest
-    return None, True
+
+    return ctx.obj["manifest"], True
 
 
 # dbt run
