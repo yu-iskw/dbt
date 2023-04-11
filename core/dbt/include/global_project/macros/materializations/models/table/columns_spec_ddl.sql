@@ -8,21 +8,13 @@
 
 {% macro table_columns_and_constraints() %}
   {# loop through user_provided_columns to create DDL with data types and constraints #}
-    {%- set user_provided_columns = model['columns'] -%}
-    {%- set raw_model_constraints = adapter.render_raw_model_constraints(model['constraints']) -%}
+    {%- set raw_column_constraints = adapter.render_raw_columns_constraints(raw_columns=model['columns']) -%}
+    {%- set raw_model_constraints = adapter.render_raw_model_constraints(raw_constraints=model['constraints']) -%}
     (
-    {% for i in user_provided_columns %}
-      {%- set col = user_provided_columns[i] -%}
-      {%- set constraints = col['constraints'] -%}
-      {{ col['name'] }} {{ col['data_type'] }}
-      {%- for c in constraints -%}
-        {%- set constraint_str = adapter.render_raw_column_constraint(c) -%}
-        {%- if constraint_str -%}
-        {{ ' ' ~ constraint_str }}
-        {%- endif -%}
-      {%- endfor -%}{{ "," if not loop.last or raw_model_constraints }}
-    {% endfor -%}
-    {% for c in raw_model_constraints %}
+    {% for c in raw_column_constraints -%}
+      {{ c }}{{ "," if not loop.last or raw_model_constraints }}
+    {% endfor %}
+    {% for c in raw_model_constraints -%}
         {{ c }}{{ "," if not loop.last }}
     {% endfor -%}
     )

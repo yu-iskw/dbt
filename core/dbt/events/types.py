@@ -749,6 +749,32 @@ class FinishedRunningStats(InfoLevel):
         return f"Finished running {self.stat_line}{self.execution} ({self.execution_time:0.2f}s)."
 
 
+class ConstraintNotEnforced(WarnLevel):
+    def code(self):
+        return "E048"
+
+    def message(self) -> str:
+        msg = (
+            f"The constraint type {self.constraint} is not enforced by {self.adapter}. "
+            "The constraint will be included in this model's DDL statement, but it will not "
+            "guarantee anything about the underlying data. Set 'warn_unenforced: false' on "
+            "this constraint to ignore this warning."
+        )
+        return line_wrap_message(warning_tag(msg))
+
+
+class ConstraintNotSupported(WarnLevel):
+    def code(self):
+        return "E049"
+
+    def message(self) -> str:
+        msg = (
+            f"The constraint type {self.constraint} is not supported by {self.adapter}, and will "
+            "be ignored. Set 'warn_unsupported: false' on this constraint to ignore this warning."
+        )
+        return line_wrap_message(warning_tag(msg))
+
+
 # =======================================================
 # I - Project parsing
 # =======================================================
