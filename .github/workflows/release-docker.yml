@@ -95,9 +95,9 @@ jobs:
           push: True
           target: ${{ github.event.inputs.package }}
           build-args: |
-            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ github.event.inputs.version_number }}
+            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.parse-valid.outputs.version }}
           tags: |
-            ghcr.io/leahwicz/${{ github.event.inputs.package }}:${{ steps.semver.outputs.base-version }}
+            ghcr.io/leahwicz/${{ github.event.inputs.package }}:${{ steps.parse-valid.outputs.version }}
 
       - name: Build and push MINOR.latest tag
         uses: docker/build-push-action@v4
@@ -107,7 +107,7 @@ jobs:
           push: True
           target: ${{ github.event.inputs.package }}
           build-args: |
-            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ github.event.inputs.version_number }}
+            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.parse-valid.outputs.version }}
           tags: |
             ghcr.io/leahwicz/${{ github.event.inputs.package }}:${{ steps.semver.outputs.major }}.${{ steps.semver.outputs.minor }}.latest
 
@@ -119,6 +119,6 @@ jobs:
           push: True
           target: ${{ github.event.inputs.package }}
           build-args: |
-            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ github.event.inputs.version_number }}
+            ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.parse-valid.outputs.version }}
           tags: |
             ghcr.io/leahwicz/${{ github.event.inputs.package }}:latest
