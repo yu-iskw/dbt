@@ -97,7 +97,7 @@ jobs:
           build-args: |
             ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ github.event.inputs.version_number }}
           tags: |
-            ghcr.io/dbt-labs/${{ github.event.inputs.package }}:${{ ${{ steps.parse-valid.outputs.base-version }} }}
+            ghcr.io/dbt-labs/${{ github.event.inputs.package }}:${{ steps.parse-valid.outputs.base-version }}
 
       - name: Build and push MINOR.latest tag
         uses: docker/build-push-action@v4
