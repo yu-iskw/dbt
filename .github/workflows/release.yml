@@ -208,6 +208,31 @@ jobs:
     secrets:
       PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
       TEST_PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      
+
+  docker-core-release:
+    name: Docker dbt-core Release
+    if: ${{ inputs.test_run }}
+
+    needs: [pypi-release]
+
+    uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
+
+    with:
+      package: 'dbt-core'
+      version_number: ${{ inputs.version_number }}
+      
+
+  docker-postgres-release:
+    name: Docker dbt-postgres Release
+
+    needs: [docker-core-release]
+
+    uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
+
+    with:
+      package: 'dbt-postgres'
+      version_number: ${{ inputs.version_number }}
 
   slack-notification:
     name: Slack Notification
