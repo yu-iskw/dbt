@@ -134,7 +134,7 @@ jobs:
 
   docker-core-release:
     name: Docker dbt-core Release
-    if: ${{ inputs.test_run }}
+    if: ${{ !inputs.test_run }}
 
     needs: [pypi-release]
 
