@@ -115,7 +115,7 @@ defaults:
     shell: bash
 
 jobs:
-  log-inputs:
+  pypi-release:
     name: Log Inputs
     runs-on: ubuntu-latest
     steps:
@@ -130,21 +130,6 @@ jobs:
           echo Package test command:               ${{ inputs.package_test_command }}
           echo Test run:                           ${{ inputs.test_run }}
           echo Nightly release:                    ${{ inputs.nightly_release }}
-
-  pypi-release:
-    name: Bump package version, Generate changelog
-
-    uses: dbt-labs/dbt-release/.github/workflows/release-prep.yml@main
-
-    with:
-      sha: ${{ inputs.sha }}
-      version_number: ${{ inputs.version_number }}
-      target_branch: ${{ inputs.target_branch }}
-      env_setup_script_path: ${{ inputs.env_setup_script_path }}
-      test_run: ${{ inputs.test_run }}
-      nightly_release: ${{ inputs.nightly_release }}
-
-    secrets: inherit
 
 
   docker-core-release:
