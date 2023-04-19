@@ -16,14 +16,26 @@ permissions:
   packages: write
 
 on:
+  workflow_call:
+    inputs:
+      package:
+       description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
+       required: true
+       type: string
+      version_number:
+       description: The release version number (i.e. 1.0.0b1). Do not include `latest` tags or a leading `v`!
+       required: true
+       type: string
   workflow_dispatch:
     inputs:
       package:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
+       type: string
       version_number:
        description: The release version number (i.e. 1.0.0b1). Do not include `latest` tags or a leading `v`!
        required: true
+       type: string
 
 jobs:
   get_version_meta:
