@@ -248,6 +248,7 @@ def docs(ctx, **kwargs):
 @p.project_dir
 @p.select
 @p.selector
+@p.empty_catalog
 @p.state
 @p.deprecated_state
 @p.target

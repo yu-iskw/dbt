@@ -414,6 +414,13 @@ skip_profile_setup = click.option(
     is_flag=True,
 )
 
+empty_catalog = click.option(
+    "--empty-catalog",
+    help="If specified, generate empty catalog.json file during the `dbt docs generate` command.",
+    default=False,
+    is_flag=True,
+)
+
 state = click.option(
     "--state",
     envvar="DBT_STATE",
