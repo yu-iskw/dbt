@@ -651,6 +651,7 @@ def seed(ctx, **kwargs):
 @p.state
 @p.deprecated_state
 @p.target
+@p.target_path
 @p.threads
 @p.vars
 @requires.postflight
