@@ -98,7 +98,7 @@ jobs:
         id: cache
         with:
           path: ${{ env.RUNNER_CACHE_PATH }}
-          key: ${{ steps.variables.outputs.cache_key }}
+          key: ${{ needs.set-variables.outputs.cache_key }}
 
       - name: Fetch Rust Toolchain
         if: steps.cache.outputs.cache-hit != 'true'
@@ -147,7 +147,6 @@ jobs:
           echo "all variables defined in latest-runner > Set Variables > outputs"
           echo "cache_key:      ${{ needs.latest-runner.outputs.cache_key }}"
           echo "release_id:     ${{ needs.latest-runner.outputs.release_id }}"
-          echo "open_prs:       ${{ needs.latest-runner.outputs.open_prs }}"
           echo "release_branch: ${{ needs.latest-runner.outputs.release_branch }}"
 
       - name: Setup Python
@@ -207,7 +206,6 @@ jobs:
 
   create-pr:
     name: Open PR for ${{ matrix.base-branch }}
-    if: ${{ needs.latest-runner.outputs.open_prs }}
 
     # depends on `model` as a separate job so that the baseline can be committed to more than one branch
     # i.e. release branch and main
@@ -229,7 +227,6 @@ jobs:
           echo "all variables defined in latest-runner > Set Variables > outputs"
           echo "cache_key:      ${{ needs.latest-runner.outputs.cache_key }}"
           echo "release_id:     ${{ needs.latest-runner.outputs.release_id }}"
-          echo "open_prs:       ${{ needs.latest-runner.outputs.open_prs }}"
           echo "release_branch: ${{ needs.latest-runner.outputs.release_branch }}"
 
       - name: Checkout
