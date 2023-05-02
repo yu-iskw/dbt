@@ -255,7 +255,6 @@ jobs:
           author_name: 'Github Build Bot'
           author_email: 'buildbot@fishtownanalytics.com'
           message: 'adding performance baseline for ${{ needs.set-variables.outputs.release_id }}'
-          branch: '${{ matrix.target-branch }}'
           push: 'origin origin/${{ matrix.target-branch }}'
 
       - name: Create Pull Request
@@ -263,6 +262,7 @@ jobs:
         with:
           author: 'Github Build Bot <buildbot@fishtownanalytics.com>'
           base: ${{ matrix.base-branch }}
+          branch: '${{ matrix.target-branch }}'
           title: 'Adding performance modeling for ${{needs.set-variables.outputs.release_id}} to ${{ matrix.base-branch }}'
           body: 'Committing perf results for tracking for the ${{needs.set-variables.outputs.release_id}}'
           labels: |
