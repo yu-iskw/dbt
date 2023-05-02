@@ -48,15 +48,14 @@ jobs:
       release_branch: ${{ steps.variables.outputs.release_branch }}
     steps:
 
-      - name: "Parse Version Into Parts"
+      - name: Parse version into parts
         id: semver
         uses: dbt-labs/actions/parse-semver@v1
         with:
           version: ${{ github.event.inputs.release_id || github.event.release.tag_name }}
           
       # collect all the variables that need to be used in subsequent jobs
-      - name: Set variables for workflow dispatch event
-        if: $GITHUB_EVENT_NAME == "workflow_dispatch"
+      - name: Set variables
         run: |
           # create a cache key that will be used in the next job. without this the
           # next job would have to checkout from main and hash the files itself.
