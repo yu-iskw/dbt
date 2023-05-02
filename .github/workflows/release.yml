@@ -135,11 +135,9 @@ jobs:
   docker-core-release:
     name: Docker dbt-core Release
     if: ${{ !inputs.test_run }}
-
     needs: [pypi-release]
 
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
-
     with:
       package: 'dbt-core'
       version_number: ${{ inputs.version_number }}
@@ -147,11 +145,9 @@ jobs:
 
   docker-postgres-release:
     name: Docker dbt-postgres Release
-
     needs: [docker-core-release]
 
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
-
     with:
       package: 'dbt-postgres'
       version_number: ${{ inputs.version_number }}
