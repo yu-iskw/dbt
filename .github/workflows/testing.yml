@@ -144,10 +144,10 @@ jobs:
 
       - name: '[DEBUG] print variables'
         run: |
-          echo "all variables defined in latest-runner > Set Variables > outputs"
-          echo "cache_key:      ${{ needs.latest-runner.outputs.cache_key }}"
-          echo "release_id:     ${{ needs.latest-runner.outputs.release_id }}"
-          echo "release_branch: ${{ needs.latest-runner.outputs.release_branch }}"
+          echo "all variables defined in set-variables"
+          echo "cache_key:      ${{ needs.set-variables.outputs.cache_key }}"
+          echo "release_id:     ${{ needs.set-variables.outputs.release_id }}"
+          echo "release_branch: ${{ needs.set-variables.outputs.release_branch }}"
 
       - name: Setup Python
         uses: actions/setup-python@v2.2.2
@@ -155,7 +155,7 @@ jobs:
           python-version: "3.8"
 
       - name: Install dbt
-        run: pip install dbt-postgres==${{ needs.latest-runner.outputs.release_id }}
+        run: pip install dbt-postgres==${{ needs.set-variables.outputs.release_id }}
 
       - name: Install Hyperfine
         run: wget https://github.com/sharkdp/hyperfine/releases/download/v1.11.0/hyperfine_1.11.0_amd64.deb && sudo dpkg -i hyperfine_1.11.0_amd64.deb
@@ -172,7 +172,7 @@ jobs:
         id: cache
         with:
           path: ${{ env.RUNNER_CACHE_PATH }}
-          key: ${{ needs.latest-runner.outputs.cache_key }}
+          key: ${{ needs.set-variables.outputs.cache_key }}
 
       - name: Move Runner
         run: mv performance/runner/target/release/runner performance/app
@@ -187,14 +187,14 @@ jobs:
       - name: Create directories
         run: |
           mkdir ${{ github.workspace }}/performance/tmp/
-          mkdir -p performance/baselines/${{ needs.latest-runner.outputs.release_id }}/
+          mkdir -p performance/baselines/${{ needs.set-variables.outputs.release_id }}/
 
       # TODO CHANGE NUMBER OF RUNS BEFORE MERGING
       # TODO this isn't putting the baseline in the right directory. it's putting it one level up.
       # Run modeling with taking 20 samples
       - name: Run Measurement
         run: |
-          performance/app model -v ${{ needs.latest-runner.outputs.release_id }} -b ${{ github.workspace }}/performance/baselines/ -p ${{ github.workspace }}/performance/projects/ -t ${{ github.workspace }}/performance/tmp/ -n 2
+          performance/app model -v ${{ needs.set-variables.outputs.release_id }} -b ${{ github.workspace }}/performance/baselines/ -p ${{ github.workspace }}/performance/projects/ -t ${{ github.workspace }}/performance/tmp/ -n 2
 
       - name: '[DEBUG] ls baseline directory after run'
         run: ls -R performance/baselines/
@@ -202,7 +202,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: baseline
-          path: performance/baselines/${{ needs.latest-runner.outputs.release_id }}/
+          path: performance/baselines/${{ needs.set-variables.outputs.release_id }}/
 
   create-pr:
     name: Open PR for ${{ matrix.base-branch }}
@@ -217,17 +217,17 @@ jobs:
       matrix:
         include:
           - base-branch: "refs/heads/main"
-            target-branch: "performance-bot/main_${{needs.latest-runner.outputs.release_id}}_${{GITHUB.RUN_ID}}"
-          - base-branch: "refs/heads/${{ needs.latest-runner.outputs.release_branch }}"
-            target-branch: "performance-bot/release_${{needs.latest-runner.outputs.release_id}}_${{GITHUB.RUN_ID}}"
+            target-branch: "performance-bot/main_${{needs.set-variables.outputs.release_id}}_${{GITHUB.RUN_ID}}"
+          - base-branch: "refs/heads/${{ needs.set-variables.outputs.release_branch }}"
+            target-branch: "performance-bot/release_${{needs.set-variables.outputs.release_id}}_${{GITHUB.RUN_ID}}"
 
     steps:
       - name: '[DEBUG] print variables'
         run: |
-          echo "all variables defined in latest-runner > Set Variables > outputs"
-          echo "cache_key:      ${{ needs.latest-runner.outputs.cache_key }}"
-          echo "release_id:     ${{ needs.latest-runner.outputs.release_id }}"
-          echo "release_branch: ${{ needs.latest-runner.outputs.release_branch }}"
+          echo "all variables defined in set-variables > Set Variables > outputs"
+          echo "cache_key:      ${{ needs.set-variables.outputs.cache_key }}"
+          echo "release_id:     ${{ needs.set-variables.outputs.release_id }}"
+          echo "release_branch: ${{ needs.set-variables.outputs.release_branch }}"
 
       - name: Checkout
         uses: actions/checkout@v2
@@ -243,7 +243,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: baseline
-          path: performance/baselines/${{ needs.latest-runner.outputs.release_id }}
+          path: performance/baselines/${{ needs.set-variables.outputs.release_id }}
 
       - name: '[DEBUG] ls baselines after artifact download'
         run: ls -R performance/baselines/
@@ -254,7 +254,7 @@ jobs:
           add: 'performance/baselines/*'
           author_name: 'Github Build Bot'
           author_email: 'buildbot@fishtownanalytics.com'
-          message: 'adding performance baseline for ${{ needs.latest-runner.outputs.release_id }}'
+          message: 'adding performance baseline for ${{ needs.set-variables.outputs.release_id }}'
           branch: '${{ matrix.target-branch }}'
           push: 'origin origin/${{ matrix.target-branch }}'
 
@@ -263,7 +263,7 @@ jobs:
         with:
           author: 'Github Build Bot <buildbot@fishtownanalytics.com>'
           base: ${{ matrix.base-branch }}
-          title: 'Adding performance modeling for ${{needs.latest-runner.outputs.release_id}} to ${{ matrix.base-branch }}'
+          title: 'Adding performance modeling for ${{needs.set-variables.outputs.release_id}} to ${{ matrix.base-branch }}'
           branch: '${{ matrix.target-branch }}'
           labels: |
             Skip Changelog
