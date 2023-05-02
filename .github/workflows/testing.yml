@@ -61,7 +61,7 @@ jobs:
           # next job would have to checkout from main and hash the files itself.
           echo "cache_key=${{ runner.os }}-${{ hashFiles('performance/runner/Cargo.toml')}}-${{ hashFiles('performance/runner/src/*') }}" >> $GITHUB_OUTPUT
 
-          branch_name="${steps.semver.outputs.major}.${steps.semver.outputs.minor}.latest"
+          branch_name="${{steps.semver.outputs.major}}.${{steps.semver.outputs.minor}}.latest"
           echo "release_branch=$branch_name" >> $GITHUB_OUTPUT
           echo "release branch is inferred to be ${branch_name}"
 
