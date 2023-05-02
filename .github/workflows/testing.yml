@@ -28,10 +28,6 @@ on:
         description: 'dbt version to model (must be non-prerelease in Pypi)'
         type: string
         required: true
-      open_prs:
-        description: Open PRs to main and release branch? (branch name inferred from provided version)
-        type: boolean
-        required: true
   pull_request: # TODO: remove, just for testing purposes
 
 env:
@@ -43,17 +39,46 @@ permissions:
   pull-requests: write
 
 jobs:
+  set-variables:
+    name: Setting Variables
+    runs-on: ubuntu-latest
+    outputs:
+      cache_key: ${{ steps.variables.outputs.cache_key }}
+      release_id: ${{ steps.semver.outputs.base-version }}
+      release_branch: ${{ steps.variables.outputs.release_branch }}
+    steps:
+
+      - name: "Parse Version Into Parts"
+        id: semver
+        uses: dbt-labs/actions/parse-semver@v1
+        with:
+          version: ${{ github.event.inputs.release_id || github.event.release.tag_name }}
+          
+      # collect all the variables that need to be used in subsequent jobs
+      - name: Set variables for workflow dispatch event
+        if: $GITHUB_EVENT_NAME == "workflow_dispatch"
+        run: |
+          # create a cache key that will be used in the next job. without this the
+          # next job would have to checkout from main and hash the files itself.
+          echo "cache_key=${{ runner.os }}-${{ hashFiles('performance/runner/Cargo.toml')}}-${{ hashFiles('performance/runner/src/*') }}" >> $GITHUB_OUTPUT
+
+          branch_name="${steps.semver.outputs.major}.${steps.semver.outputs.minor}.latest"
+          echo "release_branch=$branch_name" >> $GITHUB_OUTPUT
+          echo "release branch is inferred to be ${branch_name}"
+
   latest-runner:
     name: Build or Fetch Runner
     runs-on: ubuntu-latest
+    needs: [set-variables]
     env:
       RUSTFLAGS: "-D warnings"
-    outputs:
-      cache_key: ${{ steps.variables.outputs.cache_key }}
-      release_id: ${{ steps.variables.outputs.release_id }}
-      open_prs: ${{ steps.variables.outputs.open_prs }}
-      release_branch: ${{ steps.variables.outputs.release_branch }}
     steps:
+      - name: '[DEBUG] print variables'
+        run: |
+          echo "all variables defined in set-variables"
+          echo "cache_key:      ${{ needs.set-variables.outputs.cache_key }}"
+          echo "release_id:     ${{ needs.set-variables.outputs.release_id }}"
+          echo "release_branch: ${{ needs.set-variables.outputs.release_branch }}"
 
       # explicitly checkout the performance runner from main regardless of which
       # version we are modeling.
@@ -61,49 +86,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: main
-
-      # collect all the variables that need to be used in subsequent jobs
-      - name: Set Variables
-        id: variables
-        run: |
-          # create a cache key that will be used in the next job. without this the
-          # next job would have to checkout from main an hash the files itself.
-          echo "cache_key=${{ runner.os }}-${{ hashFiles('performance/runner/Cargo.toml')}}-${{ hashFiles('performance/runner/src/*') }}" >> $GITHUB_OUTPUT
-          # echo "::set-output name=cache_key::${{ runner.os }}-${{ hashFiles('performance/runner/Cargo.toml')}}-${{ hashFiles('performance/runner/src/*') }}"
-
-          # this value gets used to create other values locally so it gets a local definition too.
-          local_release_id=''
-          # users are prompted to input with the correct format
-          if [[ $GITHUB_EVENT_NAME == "workflow_dispatch" ]]; then
-            echo "Workflow dispatch event detected"
-            local_release_id=${{github.event.inputs.release_id}}
-            # echo "::set-output name=release_id::${{github.event.inputs.release_id}}"
-            # echo "::set-output name=open_prs::${{github.event.inputs.open_prs}}"
-            echo "release_id=${{github.event.inputs.release_id}}" >> $GITHUB_OUTPUT
-            echo "open_prs=${{github.event.inputs.open_prs}}" >> $GITHUB_OUTPUT
-          # release.tag_name has a v prepended. we must remove it.
-          else
-            echo "release event detected"
-            with_v=${{github.event.release.tag_name}}
-            without_v=${with_v:1}
-            without_v=1.2.1 # TODO: just for testing
-            local_release_id=$without_v
-            # echo "::set-output name=release_id::$without_v"
-            # echo "::set-output name=open_prs::true"
-            echo "release_id={$without_v}" >> $GITHUB_OUTPUT
-            echo "open_prs={true}" >> $GITHUB_OUTPUT
-          fi
-
-          # string manipulation to get the branch name. It can't be discovered from the github api
-          # for release triggers so we're stuck with this. If we change our branch naming strategy
-          # we have to update this code. example: 1.0.0 -> 1.0.latest. the sed command takes into
-          # account multiple digits like 1.0.999 -> 1.0.latest
-
-          no_patch=$(sed "s|\(.*\)\..*|\1|" <<< $local_release_id)
-          branch_name="${no_patch}.latest"
-          # echo "::set-output name=release_branch::$branch_name"
-          echo "release_branch={$branch_name}" >> $GITHUB_OUTPUT
-          echo "release branch is inferred to be ${branch_name}"
 
       # attempts to access a previously cached runner
       - uses: actions/cache@v2
@@ -145,7 +127,7 @@ jobs:
           command: build
           args: --release --manifest-path performance/runner/Cargo.toml
       # the cache action automatically caches this binary at the end of the job
-
+      
   model:
     # depends on `latest-runner` as a separate job so that failures in this job do not prevent
     # a successfully tested and built binary from being cached.
