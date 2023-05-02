@@ -47,6 +47,12 @@ jobs:
       release_id: ${{ steps.semver.outputs.base-version }}
       release_branch: ${{ steps.variables.outputs.release_branch }}
     steps:
+      # explicitly checkout the performance runner from main regardless of which
+      # version we are modeling.
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: main
 
       - name: Parse version into parts
         id: semver
