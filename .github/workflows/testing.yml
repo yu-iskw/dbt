@@ -137,7 +137,7 @@ jobs:
   model:
     # depends on `latest-runner` as a separate job so that failures in this job do not prevent
     # a successfully tested and built binary from being cached.
-    needs: [latest-runner]
+    needs: [set-variables, latest-runner]
     name: Model a release
     runs-on: ubuntu-latest
     steps:
