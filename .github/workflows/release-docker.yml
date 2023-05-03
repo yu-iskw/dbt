@@ -28,7 +28,7 @@ on:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
-      version_num:
+      version_number:
        description: The release version number (i.e. 1.0.0b1). Do not include `latest` tags or a leading `v`!
        required: true
        type: string
