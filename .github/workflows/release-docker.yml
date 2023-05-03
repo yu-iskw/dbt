@@ -56,8 +56,8 @@ jobs:
         id: latest
         uses: ./.github/actions/latest-wrangler
         with:
-          package: ${{ github.event.inputs.package }}
-          new_version: ${{ github.event.inputs.version_number }}
+          package: ${{ inputs.package }}
+          new_version: ${{ inputs.version_number }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           halt_on_missing: False
 
@@ -79,13 +79,13 @@ jobs:
         id: semver
         uses: dbt-labs/actions/parse-semver@v1
         with:
-          version: ${{ github.event.inputs.version_number }}
+          version: ${{ inputs.version_number }}
 
       - name: Get docker build arg
         id: build_arg
         run: |
-          BUILD_ARG_NAME=$(echo ${{ github.event.inputs.package }} | sed 's/\-/_/g')
-          BUILD_ARG_VALUE=$(echo ${{ github.event.inputs.package }} | sed 's/postgres/core/g')
+          BUILD_ARG_NAME=$(echo ${{ inputs.package }} | sed 's/\-/_/g')
+          BUILD_ARG_VALUE=$(echo ${{ inputs.package }} | sed 's/postgres/core/g')
           echo "build_arg_name=$BUILD_ARG_NAME" >> $GITHUB_OUTPUT
           echo "build_arg_value=$BUILD_ARG_VALUE" >> $GITHUB_OUTPUT
 
@@ -101,11 +101,11 @@ jobs:
         with:
           file: docker/Dockerfile
           push: True
-          target: ${{ github.event.inputs.package }}
+          target: ${{ inputs.package }}
           build-args: |
             ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.semver.outputs.version }}
           tags: |
-            ghcr.io/leahwicz/${{ github.event.inputs.package }}:${{ steps.semver.outputs.version }}
+            ghcr.io/leahwicz/${{ inputs.package }}:${{ steps.semver.outputs.version }}
 
       - name: Build and push MINOR.latest tag
         uses: docker/build-push-action@v4
@@ -113,11 +113,11 @@ jobs:
         with:
           file: docker/Dockerfile
           push: True
-          target: ${{ github.event.inputs.package }}
+          target: ${{ inputs.package }}
           build-args: |
             ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.semver.outputs.version }}
           tags: |
-            ghcr.io/leahwicz/${{ github.event.inputs.package }}:${{ steps.semver.outputs.major }}.${{ steps.semver.outputs.minor }}.latest
+            ghcr.io/leahwicz/${{ inputs.package }}:${{ steps.semver.outputs.major }}.${{ steps.semver.outputs.minor }}.latest
 
       - name: Build and push latest tag
         uses: docker/build-push-action@v4
@@ -125,8 +125,8 @@ jobs:
         with:
           file: docker/Dockerfile
           push: True
-          target: ${{ github.event.inputs.package }}
+          target: ${{ inputs.package }}
           build-args: |
             ${{ steps.build_arg.outputs.build_arg_name }}_ref=${{ steps.build_arg.outputs.build_arg_value }}@v${{ steps.semver.outputs.version }}
           tags: |
-            ghcr.io/leahwicz/${{ github.event.inputs.package }}:latest
+            ghcr.io/leahwicz/${{ inputs.package }}:latest
