@@ -18,13 +18,13 @@ permissions:
 on:
   workflow_call:
     inputs:
-      package_name:
+      package:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
   workflow_dispatch:
     inputs:
-      package_name:
+      package:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
@@ -46,9 +46,8 @@ jobs:
       - name: "[DEBUG] Print Variables"
         run: |
           echo "All variables defined as inputs"
-          echo "The package_name:          ${{ inputs.package_name }}"
+          echo "The package:          ${{ inputs.package }}"
           echo "The version_number:          ${{ inputs.version_number }}"
-          echo "The ====:          ${{ toJSON(inputs) }}"
 
       - name: "Check out the repository"
         uses: actions/checkout@v3
