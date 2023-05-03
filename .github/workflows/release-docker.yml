@@ -50,9 +50,9 @@ jobs:
       - name: "[DEBUG] Print Variables"
         run: |
           echo "All variables defined as inputs"
-          echo "The package_name:          ${{ github.event.inputs.package_name }}"
-          echo "The version_number:          ${{ github.event.inputs.version_number }}"
-          echo "The ====:          ${{ toJSON(github.event.inputs) }}"
+          echo "The package_name:          ${{ inputs.package_name }}"
+          echo "The version_number:          ${{ inputs.version_number }}"
+          echo "The ====:          ${{ toJSON(inputs) }}"
 
       - name: "Check out the repository"
         uses: actions/checkout@v3
