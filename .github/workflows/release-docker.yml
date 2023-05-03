@@ -18,7 +18,7 @@ permissions:
 on:
   workflow_call:
     inputs:
-      package:
+      package_name:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
@@ -28,7 +28,7 @@ on:
        type: string
   workflow_dispatch:
     inputs:
-      package:
+      package_name:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
@@ -50,9 +50,8 @@ jobs:
       - name: "[DEBUG] Print Variables"
         run: |
           echo "All variables defined as inputs"
-          echo "The package:          ${{ github.event.inputs.package }}"
+          echo "The package:          ${{ github.event.inputs.package_name }}"
           echo "The version_number:          ${{ github.event.inputs.version_number }}"
-          echo "The version_number:          ${{ github.event.inputs.* }}"
 
       - name: "Check out the repository"
         uses: actions/checkout@v3
