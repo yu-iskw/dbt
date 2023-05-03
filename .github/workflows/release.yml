@@ -139,7 +139,7 @@ jobs:
 
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
     with:
-      package: "dbt-core"
+      package: ${{ inputs.version_number }} # "dbt-core"
       version_number: ${{ inputs.version_number }}
       
 
