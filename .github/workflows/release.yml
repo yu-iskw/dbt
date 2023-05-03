@@ -140,7 +140,7 @@ jobs:
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
     with:
       package_name: dbt-core
-      version_number: ${{ inputs.version_number }}
+      version_num: ${{ inputs.version_number }}
       
 
   docker-postgres-release:
@@ -150,5 +150,5 @@ jobs:
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
     with:
       package_name: dbt-postgres
-      version_number: ${{ inputs.version_number }}
+      version_num: ${{ inputs.version_number }}
 
