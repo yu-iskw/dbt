@@ -22,10 +22,6 @@ on:
        description: The package to release. _One_ of [dbt-core, dbt-redshift, dbt-bigquery, dbt-snowflake, dbt-spark, dbt-postgres]
        required: true
        type: string
-      version_num:
-       description: The release version number (i.e. 1.0.0b1). Do not include `latest` tags or a leading `v`!
-       required: true
-       type: string
   workflow_dispatch:
     inputs:
       package_name:
@@ -51,7 +47,7 @@ jobs:
         run: |
           echo "All variables defined as inputs"
           echo "The package_name:          ${{ inputs.package_name }}"
-          echo "The version_num:          ${{ inputs.version_num }}"
+          echo "The version_number:          ${{ inputs.version_number }}"
           echo "The ====:          ${{ toJSON(inputs) }}"
 
       - name: "Check out the repository"
@@ -62,7 +58,7 @@ jobs:
         uses: ./.github/actions/latest-wrangler
         with:
           package: ${{ github.event.inputs.package }}
-          new_version: ${{ github.event.inputs.version_num }}
+          new_version: ${{ github.event.inputs.version_number }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           halt_on_missing: False
 
@@ -84,7 +80,7 @@ jobs:
         id: semver
         uses: dbt-labs/actions/parse-semver@v1
         with:
-          version: ${{ github.event.inputs.version_num }}
+          version: ${{ github.event.inputs.version_number }}
 
       - name: Get docker build arg
         id: build_arg
