@@ -49,9 +49,10 @@ jobs:
     steps:
       - name: "[DEBUG] Print Variables"
         run: |
-          echo "all variables defined as inputs"
+          echo "All variables defined as inputs"
           echo "The package:          ${{ github.event.inputs.package }}"
           echo "The version_number:          ${{ github.event.inputs.version_number }}"
+          echo "The version_number:          ${{ github.event.inputs }}"
 
       - name: "Check out the repository"
         uses: actions/checkout@v3
