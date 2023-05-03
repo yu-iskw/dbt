@@ -139,7 +139,7 @@ jobs:
 
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
     with:
-      package_name: dbt-core
+      package: dbt-core
       
 
   docker-postgres-release:
@@ -148,5 +148,5 @@ jobs:
 
     uses: leahwicz/dbt-core/.github/workflows/release-docker.yml@main
     with:
-      package_name: dbt-postgres
+      package: dbt-postgres
 
