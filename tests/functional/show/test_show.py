@@ -87,6 +87,10 @@ class TestShow:
         )
         assert "col_hundo" in log_output
 
+    def test_seed(self, project):
+        (results, log_output) = run_dbt_and_capture(["show", "--select", "sample_seed"])
+        assert "Previewing node 'sample_seed'" in log_output
+
 
 class TestShowModelVersions:
     @pytest.fixture(scope="class")
