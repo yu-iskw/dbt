@@ -77,12 +77,16 @@ class GraphRunnableTask(ConfiguredTask):
 
         if self.args.state:
             self.previous_state = PreviousState(
-                path=self.args.state, current_path=Path(self.config.target_path)
+                state_path=self.args.state,
+                target_path=Path(self.config.target_path),
+                project_root=Path(self.config.project_root),
             )
 
         if self.args.defer_state:
             self.previous_defer_state = PreviousState(
-                path=self.args.defer_state, current_path=Path(self.config.target_path)
+                state_path=self.args.defer_state,
+                target_path=Path(self.config.target_path),
+                project_root=Path(self.config.project_root),
             )
 
     def index_offset(self, value: int) -> int:
@@ -158,7 +162,7 @@ class GraphRunnableTask(ConfiguredTask):
         raise NotImplementedError("Not Implemented")
 
     def result_path(self):
-        return os.path.join(self.config.target_path, RESULT_FILE_NAME)
+        return os.path.join(self.config.project_target_path, RESULT_FILE_NAME)
 
     def get_runner(self, node):
         adapter = get_adapter(self.config)
@@ -457,7 +461,7 @@ class GraphRunnableTask(ConfiguredTask):
             )
 
         if self.args.write_json:
-            write_manifest(self.manifest, self.config.target_path)
+            write_manifest(self.manifest, self.config.project_target_path)
             if hasattr(result, "write"):
                 result.write(self.result_path())
 
