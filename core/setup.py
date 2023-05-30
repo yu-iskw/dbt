@@ -2,9 +2,9 @@
 import os
 import sys
 
-if sys.version_info < (3, 7, 2):
+if sys.version_info < (3, 8):
     print("Error: dbt does not support this version of Python.")
-    print("Please upgrade to Python 3.7.2 or higher.")
+    print("Please upgrade to Python 3.8 or higher.")
     sys.exit(1)
 
 
@@ -55,8 +55,7 @@ setup(
         "logbook>=1.5,<1.6",
         "mashumaro[msgpack]==3.6",
         "minimal-snowplow-tracker==0.0.2",
-        "networkx>=2.3,<2.8.1;python_version<'3.8'",
-        "networkx>=2.3,<3;python_version>='3.8'",
+        "networkx>=2.3,<3",
         "packaging>20.9",
         "sqlparse>=0.2.3,<0.4.4",
         "dbt-extractor~=0.4.1",
@@ -79,11 +78,10 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: POSIX :: Linux",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],
-    python_requires=">=3.7.2",
+    python_requires=">=3.8",
 )
