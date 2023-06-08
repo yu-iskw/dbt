@@ -62,6 +62,9 @@ from dbt.node_types import NodeType
 from dbt.flags import get_flags, MP_CONTEXT
 from dbt import tracking
 import dbt.utils
+from dbt_semantic_interfaces.implementations.metric import PydanticMetric
+from dbt_semantic_interfaces.implementations.semantic_manifest import PydanticSemanticManifest
+from dbt_semantic_interfaces.implementations.semantic_model import PydanticSemanticModel
 
 NodeEdgeMap = Dict[str, List[str]]
 PackageName = str
@@ -985,6 +988,20 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             self._analysis_lookup = AnalysisLookup(self)
         return self._analysis_lookup
 
+    @property
+    def pydantic_semantic_manifest(self) -> PydanticSemanticManifest:
+        pydantic_semantic_manifest = PydanticSemanticManifest(metrics=[], semantic_models=[])
+
+        for semantic_model in self.semantic_nodes.values():
+            pydantic_semantic_manifest.semantic_models.append(
+                PydanticSemanticModel.parse_obj(semantic_model.to_dict())
+            )
+
+        for metric in self.metrics.values():
+            pydantic_semantic_manifest.metrics.append(PydanticMetric.parse_obj(metric.to_dict()))
+
+        return pydantic_semantic_manifest
+
     def resolve_refs(
         self, source_node: GraphMemberNode, current_project: str
     ) -> List[MaybeNonSource]:
@@ -1377,8 +1394,9 @@ class WritableManifest(ArtifactMixin):
     def upgrade_schema_version(cls, data):
         """This overrides the "upgrade_schema_version" call in VersionedSchema (via
         ArtifactMixin) to modify the dictionary passed in from earlier versions of the manifest."""
-        if get_manifest_schema_version(data) <= 9:
-            data = upgrade_manifest_json(data)
+        manifest_schema_version = get_manifest_schema_version(data)
+        if manifest_schema_version <= 9:
+            data = upgrade_manifest_json(data, manifest_schema_version)
         return cls.from_dict(data)
 
     def __post_serialize__(self, dct):

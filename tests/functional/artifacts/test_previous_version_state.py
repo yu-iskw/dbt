@@ -130,21 +130,16 @@ models:
 metrics:
   - name: my_metric
     label: Count records
-    model: ref('my_model')
-
-    type: count
-    sql: "*"
-    timestamp: updated_at
-    time_grains: [day]
+    type: simple
+    type_params:
+      measure: customers
   - name: disabled_metric
     label: Count records
-    model: ref('my_model')
     config:
         enabled: False
-    type: count
-    sql: "*"
-    timestamp: updated_at
-    time_grains: [day]
+    type: simple
+    type_params:
+      measure: customers
 
 sources:
   - name: my_source

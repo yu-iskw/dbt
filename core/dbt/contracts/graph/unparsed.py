@@ -8,7 +8,6 @@ from dbt.contracts.util import (
     Mergeable,
     Replaceable,
 )
-from dbt.contracts.graph.manifest_upgrade import rename_metric_attr
 
 # trigger the PathEncoder
 import dbt.helper_types  # noqa:F401
@@ -594,25 +593,48 @@ class MetricTime(dbtClassMixin, Mergeable):
 
 
 @dataclass
-class UnparsedMetric(dbtClassMixin, Replaceable):
+class UnparsedMetricInputMeasure(dbtClassMixin):
+    name: str
+    filter: Optional[str] = None
+    alias: Optional[str] = None
+
+
+@dataclass
+class UnparsedMetricInput(dbtClassMixin):
+    name: str
+    filter: Optional[str] = None
+    alias: Optional[str] = None
+    offset_window: Optional[str] = None
+    offset_to_grain: Optional[str] = None  # str is really a TimeGranularity Enum
+
+
+@dataclass
+class UnparsedMetricTypeParams(dbtClassMixin):
+    measure: Optional[Union[UnparsedMetricInputMeasure, str]] = None
+    measures: Optional[List[Union[UnparsedMetricInputMeasure, str]]] = None
+    numerator: Optional[Union[UnparsedMetricInputMeasure, str]] = None
+    denominator: Optional[Union[UnparsedMetricInputMeasure, str]] = None
+    expr: Optional[str] = None
+    window: Optional[str] = None
+    grain_to_date: Optional[str] = None  # str is really a TimeGranularity Enum
+    metrics: Optional[List[Union[UnparsedMetricInput, str]]] = None
+
+
+@dataclass
+class UnparsedMetric(dbtClassMixin):
     name: str
     label: str
-    calculation_method: str
-    expression: str
+    type: str
+    type_params: UnparsedMetricTypeParams
     description: str = ""
-    timestamp: Optional[str] = None
-    time_grains: List[str] = field(default_factory=list)
-    dimensions: List[str] = field(default_factory=list)
-    window: Optional[MetricTime] = None
-    model: Optional[str] = None
-    filters: List[MetricFilter] = field(default_factory=list)
+    filter: Optional[str] = None
+    # metadata: Optional[Unparsedetadata] = None # TODO
     meta: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
     config: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def validate(cls, data):
-        data = rename_metric_attr(data, raise_deprecation_warning=True)
         super(UnparsedMetric, cls).validate(data)
         if "name" in data:
             errors = []
@@ -631,22 +653,6 @@ class UnparsedMetric(dbtClassMixin, Replaceable):
                 raise ParsingError(
                     f"The metric name '{data['name']}' is invalid.  It {', '.join(e for e in errors)}"
                 )
-
-        if data.get("timestamp") is None and data.get("time_grains") is not None:
-            raise ValidationError(
-                f"The metric '{data['name']} has time_grains defined but is missing a timestamp dimension."
-            )
-
-        if data.get("timestamp") is None and data.get("window") is not None:
-            raise ValidationError(
-                f"The metric '{data['name']} has a window defined but is missing a timestamp dimension."
-            )
-
-        if data.get("model") is None and data.get("calculation_method") != "derived":
-            raise ValidationError("Non-derived metrics require a 'model' property")
-
-        if data.get("model") is not None and data.get("calculation_method") == "derived":
-            raise ValidationError("Derived metrics cannot have a 'model' property")
 
 
 @dataclass
