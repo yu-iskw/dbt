@@ -10,7 +10,8 @@
     "metrics",
     "groups",
     "selectors",
-    "public_nodes"
+    "public_nodes",
+    "semantic_nodes"
   ],
   "properties": {
     "metadata": {
@@ -209,10 +210,17 @@
         "$ref": "#/definitions/PublicModel"
       },
       "description": "The public models used in the dbt project"
+    },
+    "semantic_nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/SemanticModel"
+      },
+      "description": "The semantic models defined in the dbt project"
     }
   },
   "additionalProperties": false,
-  "description": "WritableManifest(metadata: dbt.contracts.graph.manifest.ManifestMetadata, nodes: Mapping[str, Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode]], sources: Mapping[str, dbt.contracts.graph.nodes.SourceDefinition], macros: Mapping[str, dbt.contracts.graph.nodes.Macro], docs: Mapping[str, dbt.contracts.graph.nodes.Documentation], exposures: Mapping[str, dbt.contracts.graph.nodes.Exposure], metrics: Mapping[str, dbt.contracts.graph.nodes.Metric], groups: Mapping[str, dbt.contracts.graph.nodes.Group], selectors: Mapping[str, Any], disabled: Optional[Mapping[str, List[Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode, dbt.contracts.graph.nodes.SourceDefinition, dbt.contracts.graph.nodes.Exposure, dbt.contracts.graph.nodes.Metric]]]], parent_map: Optional[Dict[str, List[str]]], child_map: Optional[Dict[str, List[str]]], group_map: Optional[Dict[str, List[str]]], public_nodes: Mapping[str, dbt.contracts.publication.PublicModel])",
+  "description": "WritableManifest(metadata: dbt.contracts.graph.manifest.ManifestMetadata, nodes: Mapping[str, Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode]], sources: Mapping[str, dbt.contracts.graph.nodes.SourceDefinition], macros: Mapping[str, dbt.contracts.graph.nodes.Macro], docs: Mapping[str, dbt.contracts.graph.nodes.Documentation], exposures: Mapping[str, dbt.contracts.graph.nodes.Exposure], metrics: Mapping[str, dbt.contracts.graph.nodes.Metric], groups: Mapping[str, dbt.contracts.graph.nodes.Group], selectors: Mapping[str, Any], disabled: Optional[Mapping[str, List[Union[dbt.contracts.graph.nodes.AnalysisNode, dbt.contracts.graph.nodes.SingularTestNode, dbt.contracts.graph.nodes.HookNode, dbt.contracts.graph.nodes.ModelNode, dbt.contracts.graph.nodes.RPCNode, dbt.contracts.graph.nodes.SqlNode, dbt.contracts.graph.nodes.GenericTestNode, dbt.contracts.graph.nodes.SnapshotNode, dbt.contracts.graph.nodes.SeedNode, dbt.contracts.graph.nodes.SourceDefinition, dbt.contracts.graph.nodes.Exposure, dbt.contracts.graph.nodes.Metric]]]], parent_map: Optional[Dict[str, List[str]]], child_map: Optional[Dict[str, List[str]]], group_map: Optional[Dict[str, List[str]]], public_nodes: Mapping[str, dbt.contracts.publication.PublicModel], semantic_nodes: Mapping[str, dbt.contracts.graph.nodes.SemanticModel])",
   "definitions": {
     "ManifestMetadata": {
       "type": "object",
@@ -229,7 +237,7 @@
         "generated_at": {
           "type": "string",
           "format": "date-time",
-          "default": "2023-06-01T17:10:44.803525Z"
+          "default": "2023-06-07T22:58:05.223879Z"
         },
         "invocation_id": {
           "oneOf": [
@@ -240,7 +248,7 @@
               "type": "null"
             }
           ],
-          "default": "2cd4fe5a-501b-422f-a628-80b34230967b"
+          "default": "468b0d14-2c98-40b2-ae17-fc3ab0257c34"
         },
         "env": {
           "type": "object",
@@ -470,7 +478,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.805417
+          "default": 1686178685.225652
         },
         "config_call_dict": {
           "type": "object",
@@ -1182,7 +1190,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.807345
+          "default": 1686178685.226929
         },
         "config_call_dict": {
           "type": "object",
@@ -1570,7 +1578,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.807956
+          "default": 1686178685.2275221
         },
         "config_call_dict": {
           "type": "object",
@@ -1846,7 +1854,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.8085592
+          "default": 1686178685.228151
         },
         "config_call_dict": {
           "type": "object",
@@ -2258,7 +2266,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.809459
+          "default": 1686178685.229036
         },
         "config_call_dict": {
           "type": "object",
@@ -2524,7 +2532,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.810038
+          "default": 1686178685.2295911
         },
         "config_call_dict": {
           "type": "object",
@@ -2783,7 +2791,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.810735
+          "default": 1686178685.2302458
         },
         "config_call_dict": {
           "type": "object",
@@ -3079,7 +3087,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.8118432
+          "default": 1686178685.231343
         },
         "config_call_dict": {
           "type": "object",
@@ -3577,7 +3585,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.812869
+          "default": 1686178685.232364
         },
         "config_call_dict": {
           "type": "object",
@@ -3989,7 +3997,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.814112
+          "default": 1686178685.2336159
         }
       },
       "additionalProperties": false,
@@ -4301,7 +4309,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.814394
+          "default": 1686178685.2339032
         },
         "supported_languages": {
           "oneOf": [
@@ -4542,7 +4550,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.815081
+          "default": 1686178685.234565
         }
       },
       "additionalProperties": false,
@@ -4763,7 +4771,7 @@
         },
         "created_at": {
           "type": "number",
-          "default": 1685639444.8157508
+          "default": 1686178685.23521
         },
         "group": {
           "oneOf": [
@@ -4983,7 +4991,7 @@
         "generated_at": {
           "type": "string",
           "format": "date-time",
-          "default": "2023-06-01T17:10:44.816336Z"
+          "default": "2023-06-07T22:58:05.235799Z"
         },
         "deprecation_date": {
           "oneOf": [
@@ -4999,6 +5007,343 @@
       },
       "additionalProperties": false,
       "description": "Used to represent cross-project models"
+    },
+    "SemanticModel": {
+      "type": "object",
+      "required": [
+        "name",
+        "resource_type",
+        "package_name",
+        "path",
+        "original_file_path",
+        "unique_id",
+        "fqn",
+        "model",
+        "entities",
+        "measures",
+        "dimensions"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "resource_type": {
+          "type": "string",
+          "enum": [
+            "model",
+            "analysis",
+            "test",
+            "snapshot",
+            "operation",
+            "seed",
+            "rpc",
+            "sql operation",
+            "doc",
+            "source",
+            "macro",
+            "exposure",
+            "metric",
+            "group",
+            "semantic model"
+          ]
+        },
+        "package_name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "original_file_path": {
+          "type": "string"
+        },
+        "unique_id": {
+          "type": "string"
+        },
+        "fqn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "node_relation": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/NodeRelation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Entity"
+          }
+        },
+        "measures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Measure"
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Dimension"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "SemanticModel(name: str, resource_type: dbt.node_types.NodeType, package_name: str, path: str, original_file_path: str, unique_id: str, fqn: List[str], description: Optional[str], model: str, node_relation: Optional[dbt.contracts.graph.nodes.NodeRelation], entities: Sequence[dbt.contracts.graph.unparsed.Entity], measures: Sequence[dbt.contracts.graph.unparsed.Measure], dimensions: Sequence[dbt.contracts.graph.unparsed.Dimension])"
+    },
+    "NodeRelation": {
+      "type": "object",
+      "required": [
+        "alias",
+        "schema_name"
+      ],
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "database": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "NodeRelation(alias: str, schema_name: str, database: Optional[str] = None)"
+    },
+    "Entity": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expr": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Entity(name: str, type: str, description: Optional[str] = None, role: Optional[str] = None, expr: Optional[str] = None)"
+    },
+    "Measure": {
+      "type": "object",
+      "required": [
+        "name",
+        "agg"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "agg": {
+          "type": "string"
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "create_metric": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expr": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agg_params": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/MeasureAggregationParameters"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "non_additive_dimension": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agg_time_dimension": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Measure(name: str, agg: str, description: Optional[str] = None, create_metric: Optional[bool] = None, expr: Optional[str] = None, agg_params: Optional[dbt.contracts.graph.unparsed.MeasureAggregationParameters] = None, non_additive_dimension: Optional[Dict[str, Any]] = None, agg_time_dimension: Optional[str] = None)"
+    },
+    "MeasureAggregationParameters": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "percentile": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "use_discrete_percentile": {
+          "type": "boolean",
+          "default": false
+        },
+        "use_approximate_percentile": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "MeasureAggregationParameters(percentile: Optional[float] = None, use_discrete_percentile: bool = False, use_approximate_percentile: bool = False)"
+    },
+    "Dimension": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_partition": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false
+        },
+        "type_params": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expr": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Dimension(name: str, type: str, description: Optional[str] = None, is_partition: Optional[bool] = False, type_params: Optional[Dict[str, Any]] = None, expr: Optional[str] = None)"
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",

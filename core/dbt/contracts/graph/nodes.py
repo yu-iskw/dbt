@@ -6,29 +6,23 @@ from enum import Enum
 import hashlib
 
 from mashumaro.types import SerializableType
-from typing import (
-    Optional,
-    Union,
-    List,
-    Dict,
-    Any,
-    Sequence,
-    Tuple,
-    Iterator,
-)
+from typing import Optional, Union, List, Dict, Any, Sequence, Tuple, Iterator, Protocol
 
 from dbt.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
 
 from dbt.clients.system import write_file
 from dbt.contracts.files import FileHash
 from dbt.contracts.graph.unparsed import (
+    Dimension,
     Docs,
+    Entity,
     ExposureType,
     ExternalTable,
     FreshnessThreshold,
     HasYamlMetadata,
     MacroArgument,
     MaturityType,
+    Measure,
     MetricFilter,
     MetricTime,
     Owner,
@@ -62,12 +56,6 @@ from .model_config import (
     EmptySnapshotConfig,
     SnapshotConfig,
 )
-import sys
-
-if sys.version_info >= (3, 8):
-    from typing import Protocol
-else:
-    from typing_extensions import Protocol
 
 
 # =====================================================================
@@ -562,6 +550,30 @@ class CompiledNode(ParsedNode):
     @property
     def depends_on_macros(self):
         return self.depends_on.macros
+
+
+@dataclass
+class FileSlice(dbtClassMixin, Replaceable):
+    """Provides file slice level context about what something was created from.
+
+    Implementation of the dbt-semantic-interfaces `FileSlice` protocol
+    """
+
+    filename: str
+    content: str
+    start_line_number: int
+    end_line_number: int
+
+
+@dataclass
+class SourceFileMetadata(dbtClassMixin, Replaceable):
+    """Provides file context about what something was created from.
+
+    Implementation of the dbt-semantic-interfaces `Metadata` protocol
+    """
+
+    repo_file_path: str
+    file_slice: FileSlice
 
 
 # ====================================
@@ -1409,6 +1421,28 @@ class Group(BaseNode):
     name: str
     owner: Owner
     resource_type: NodeType = field(metadata={"restrict": [NodeType.Group]})
+
+
+# ====================================
+# SemanticModel and related classes
+# ====================================
+
+
+@dataclass
+class NodeRelation(dbtClassMixin):
+    alias: str
+    schema_name: str  # TODO: Could this be called simply "schema" so we could reuse StateRelation?
+    database: Optional[str] = None
+
+
+@dataclass
+class SemanticModel(GraphNode):
+    description: Optional[str]
+    model: str
+    node_relation: Optional[NodeRelation]
+    entities: Sequence[Entity]
+    measures: Sequence[Measure]
+    dimensions: Sequence[Dimension]
 
 
 # ====================================
