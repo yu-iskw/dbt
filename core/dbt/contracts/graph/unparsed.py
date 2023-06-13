@@ -3,6 +3,11 @@ import re
 
 from dbt import deprecations
 from dbt.node_types import NodeType
+from dbt.contracts.graph.semantic_models import (
+    Defaults,
+    DimensionValidityParams,
+    MeasureAggregationParameters,
+)
 from dbt.contracts.util import (
     AdditionalPropertiesMixin,
     Mergeable,
@@ -673,52 +678,58 @@ class UnparsedGroup(dbtClassMixin, Replaceable):
 
 
 @dataclass
-class Entity(dbtClassMixin):
+class UnparsedEntity(dbtClassMixin):
     name: str
-    type: str  # actually an enum
+    type: str  # EntityType enum
     description: Optional[str] = None
     role: Optional[str] = None
     expr: Optional[str] = None
 
 
 @dataclass
-class MeasureAggregationParameters(dbtClassMixin):
-    percentile: Optional[float] = None
-    use_discrete_percentile: bool = False
-    use_approximate_percentile: bool = False
+class UnparsedNonAdditiveDimension(dbtClassMixin):
+    name: str
+    window_choice: str  # AggregationType enum
+    window_grouples: List[str]
 
 
 @dataclass
-class Measure(dbtClassMixin):
+class UnparsedMeasure(dbtClassMixin):
     name: str
     agg: str  # actually an enum
     description: Optional[str] = None
-    create_metric: Optional[bool] = None
+    create_metric: bool = False
     expr: Optional[str] = None
     agg_params: Optional[MeasureAggregationParameters] = None
-    non_additive_dimension: Optional[Dict[str, Any]] = None
+    non_additive_dimension: Optional[UnparsedNonAdditiveDimension] = None
     agg_time_dimension: Optional[str] = None
 
 
 @dataclass
-class Dimension(dbtClassMixin):
+class UnparsedDimensionTypeParams(dbtClassMixin):
+    time_granularity: str  # TimeGranularity enum
+    validity_params: Optional[DimensionValidityParams] = None
+
+
+@dataclass
+class UnparsedDimension(dbtClassMixin):
     name: str
     type: str  # actually an enum
     description: Optional[str] = None
-    is_partition: Optional[bool] = False
-    type_params: Optional[Dict[str, Any]] = None
+    is_partition: bool = False
+    type_params: Optional[UnparsedDimensionTypeParams] = None
     expr: Optional[str] = None
-    # TODO metadata: Optional[Metadata] (this would actually be the YML for the dimension)
 
 
 @dataclass
 class UnparsedSemanticModel(dbtClassMixin):
     name: str
-    description: Optional[str]
     model: str  # looks like "ref(...)"
-    entities: List[Entity] = field(default_factory=list)
-    measures: List[Measure] = field(default_factory=list)
-    dimensions: List[Dimension] = field(default_factory=list)
+    description: Optional[str] = None
+    defaults: Optional[Defaults] = None
+    entities: List[UnparsedEntity] = field(default_factory=list)
+    measures: List[UnparsedMeasure] = field(default_factory=list)
+    dimensions: List[UnparsedDimension] = field(default_factory=list)
 
 
 def normalize_date(d: Optional[datetime.date]) -> Optional[datetime.datetime]:
