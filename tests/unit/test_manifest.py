@@ -335,6 +335,9 @@ class ManifestTest(unittest.TestCase):
                 original_file_path="schema.yml",
             ),
         }
+
+        self.semantic_nodes = {}
+
         for exposure in self.exposures.values():
             exposure.validate(exposure.to_dict(omit_none=True))
         for metric in self.metrics.values():
@@ -473,15 +476,26 @@ class ManifestTest(unittest.TestCase):
         flat_metrics = flat_graph["metrics"]
         flat_nodes = flat_graph["nodes"]
         flat_sources = flat_graph["sources"]
+        flat_semantic_nodes = flat_graph["semantic_nodes"]
         self.assertEqual(
             set(flat_graph),
-            set(["exposures", "groups", "nodes", "sources", "metrics"]),
+            set(
+                [
+                    "exposures",
+                    "groups",
+                    "nodes",
+                    "sources",
+                    "metrics",
+                    "semantic_nodes",
+                ]
+            ),
         )
         self.assertEqual(set(flat_exposures), set(self.exposures))
         self.assertEqual(set(flat_groups), set(self.groups))
         self.assertEqual(set(flat_metrics), set(self.metrics))
         self.assertEqual(set(flat_nodes), set(self.nested_nodes))
         self.assertEqual(set(flat_sources), set(self.sources))
+        self.assertEqual(set(flat_semantic_nodes), set(self.semantic_nodes))
         for node in flat_nodes.values():
             self.assertEqual(frozenset(node), REQUIRED_PARSED_NODE_KEYS)
 
@@ -997,13 +1011,23 @@ class MixedManifestTest(unittest.TestCase):
             selectors={},
             files={},
             exposures={},
+            semantic_nodes={},
         )
         manifest.build_flat_graph()
         flat_graph = manifest.flat_graph
         flat_nodes = flat_graph["nodes"]
         self.assertEqual(
             set(flat_graph),
-            set(["exposures", "groups", "metrics", "nodes", "sources"]),
+            set(
+                [
+                    "exposures",
+                    "groups",
+                    "metrics",
+                    "nodes",
+                    "sources",
+                    "semantic_nodes",
+                ]
+            ),
         )
         self.assertEqual(set(flat_nodes), set(self.nested_nodes))
         compiled_count = 0

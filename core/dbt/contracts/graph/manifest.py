@@ -753,6 +753,9 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             "metrics": {k: v.to_dict(omit_none=False) for k, v in self.metrics.items()},
             "nodes": {k: v.to_dict(omit_none=False) for k, v in self.nodes.items()},
             "sources": {k: v.to_dict(omit_none=False) for k, v in self.sources.items()},
+            "semantic_nodes": {
+                k: v.to_dict(omit_none=False) for k, v in self.semantic_nodes.items()
+            },
         }
 
     def build_disabled_by_file_id(self):
@@ -813,6 +816,7 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             self.nodes.values(),
             self.sources.values(),
             self.metrics.values(),
+            self.semantic_nodes.values(),
         )
         for resource in all_resources:
             resource_type_plural = resource.resource_type.pluralize()
@@ -847,6 +851,8 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             disabled={k: _deepcopy(v) for k, v in self.disabled.items()},
             files={k: _deepcopy(v) for k, v in self.files.items()},
             state_check=_deepcopy(self.state_check),
+            publications={k: _deepcopy(v) for k, v in self.publications.items()},
+            semantic_nodes={k: _deepcopy(v) for k, v in self.semantic_nodes.items()},
         )
         copy.build_flat_graph()
         return copy
@@ -858,6 +864,7 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
                 self.sources.values(),
                 self.exposures.values(),
                 self.metrics.values(),
+                self.semantic_nodes.values(),
             )
         )
         forward_edges, backward_edges = build_node_edges(edge_members)
@@ -921,6 +928,8 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             return self.exposures[unique_id]
         elif unique_id in self.metrics:
             return self.metrics[unique_id]
+        elif unique_id in self.semantic_nodes:
+            return self.semantic_nodes[unique_id]
         else:
             # something terrible has happened
             raise dbt.exceptions.DbtInternalError(
@@ -994,7 +1003,9 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
         return [node.unique_id for node in self.nodes.values() if node.is_external_node]
 
     def resolve_refs(
-        self, source_node: GraphMemberNode, current_project: str
+        self,
+        source_node: ModelNode,
+        current_project: str,  # TODO: ModelNode is overly restrictive typing
     ) -> List[MaybeNonSource]:
         resolved_refs: List[MaybeNonSource] = []
         for ref in source_node.refs:
@@ -1286,6 +1297,8 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             self.source_patches,
             self.disabled,
             self.env_vars,
+            self.publications,
+            self.semantic_nodes,
             self._doc_lookup,
             self._source_lookup,
             self._ref_lookup,
