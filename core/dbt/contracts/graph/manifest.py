@@ -55,7 +55,7 @@ from dbt.helper_types import PathSet
 from dbt.events.functions import fire_event
 from dbt.events.types import MergedFromState, UnpinnedRefNewVersionAvailable
 from dbt.events.contextvars import get_node_info
-from dbt.node_types import NodeType
+from dbt.node_types import NodeType, AccessType
 from dbt.flags import get_flags, MP_CONTEXT
 from dbt import tracking
 import dbt.utils
@@ -1122,6 +1122,50 @@ class Manifest(MacroMethods, DataClassMessagePackMixin, dbtClassMixin):
             if result is not None:
                 return result
         return None
+
+    def is_invalid_private_ref(
+        self, node: GraphMemberNode, target_model: MaybeNonSource, dependencies: Optional[Mapping]
+    ) -> bool:
+        dependencies = dependencies or {}
+        if not isinstance(target_model, ModelNode):
+            return False
+
+        is_private_ref = (
+            target_model.access == AccessType.Private
+            # don't raise this reference error for ad hoc 'preview' queries
+            and node.resource_type != NodeType.SqlOperation
+            and node.resource_type != NodeType.RPCCall  # TODO: rm
+        )
+        target_dependency = dependencies.get(target_model.package_name)
+        restrict_package_access = target_dependency.restrict_access if target_dependency else False
+
+        # TODO: SemanticModel and SourceDefinition do not have group, and so should not be able to make _any_ private ref.
+        return is_private_ref and (
+            not hasattr(node, "group")
+            or not node.group
+            or node.group != target_model.group
+            or restrict_package_access
+        )
+
+    def is_invalid_protected_ref(
+        self, node: GraphMemberNode, target_model: MaybeNonSource, dependencies: Optional[Mapping]
+    ) -> bool:
+        dependencies = dependencies or {}
+        if not isinstance(target_model, ModelNode):
+            return False
+
+        is_protected_ref = (
+            target_model.access == AccessType.Protected
+            # don't raise this reference error for ad hoc 'preview' queries
+            and node.resource_type != NodeType.SqlOperation
+            and node.resource_type != NodeType.RPCCall  # TODO: rm
+        )
+        target_dependency = dependencies.get(target_model.package_name)
+        restrict_package_access = target_dependency.restrict_access if target_dependency else False
+
+        return is_protected_ref and (
+            node.package_name != target_model.package_name and restrict_package_access
+        )
 
     # Called by RunTask.defer_to_manifest
     def merge_from_artifact(
