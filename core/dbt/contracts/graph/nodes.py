@@ -585,6 +585,13 @@ class ModelNode(CompiledNode):
         if args.version:
             unique_id = f"{unique_id}.{args.version}"
 
+        # build unrendered config -- for usage in ParsedNode.same_contents
+        unrendered_config = {}
+        unrendered_config["alias"] = args.identifier
+        unrendered_config["schema"] = args.schema
+        if args.database:
+            unrendered_config["database"] = args.database
+
         return cls(
             resource_type=NodeType.Model,
             name=args.name,
@@ -602,6 +609,7 @@ class ModelNode(CompiledNode):
             access=AccessType(args.access),
             original_file_path="",
             path="",
+            unrendered_config=unrendered_config,
             depends_on=DependsOn(nodes=args.depends_on_nodes),
             config=NodeConfig(enabled=args.enabled),
         )
