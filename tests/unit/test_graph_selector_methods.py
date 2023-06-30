@@ -843,6 +843,14 @@ def test_select_fqn(manifest):
     assert search_manifest_using_method(manifest, method, "versioned_model.v1") == {
         "versioned_model.v1"
     }
+    # version selection with _ instead of '.'
+    assert search_manifest_using_method(manifest, method, "versioned_model_v1") == {
+        "versioned_model.v1"
+    }
+    # version selection with _ instead of '.' - latest version
+    assert search_manifest_using_method(manifest, method, "versioned_model_v2") == {
+        "versioned_model.v2"
+    }
     # wildcards
     assert search_manifest_using_method(manifest, method, "*.*.*_model") == {
         "mynamespace.union_model",
@@ -1019,6 +1027,15 @@ def test_select_file(manifest):
     assert not search_manifest_using_method(manifest, method, "missing.sql")
     assert not search_manifest_using_method(manifest, method, "missing.py")
     assert search_manifest_using_method(manifest, method, "table_*.csv") == {"table_model_csv"}
+
+    # stem selector match
+    assert search_manifest_using_method(manifest, method, "union_model") == {
+        "union_model",
+        "mynamespace.union_model",
+    }
+    assert search_manifest_using_method(manifest, method, "versioned_model_v1") == {
+        "versioned_model.v1"
+    }
 
 
 def test_select_package(manifest):

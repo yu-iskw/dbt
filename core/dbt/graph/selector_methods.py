@@ -61,8 +61,8 @@ def is_selected_node(fqn: List[str], node_selector: str, is_versioned: bool) -> 
         flat_node_selector = node_selector.split(".")
         if fqn[-2] == node_selector:
             return True
-        # If this is a versioned model, then the last two segments should be allowed to exactly match
-        elif fqn[-2:] == flat_node_selector[-2:]:
+        # If this is a versioned model, then the last two segments should be allowed to exactly match on either the '.' or '_' delimiter
+        elif "_".join(fqn[-2:]) == "_".join(flat_node_selector[-2:]):
             return True
     else:
         if fqn[-1] == node_selector:
@@ -350,6 +350,8 @@ class FileSelectorMethod(SelectorMethod):
         """Yields nodes from included that match the given file name."""
         for node, real_node in self.all_nodes(included_nodes):
             if fnmatch(Path(real_node.original_file_path).name, selector):
+                yield node
+            elif fnmatch(Path(real_node.original_file_path).stem, selector):
                 yield node
 
 
