@@ -1245,7 +1245,6 @@ def test_select_state_no_change(manifest, previous_state):
     method = statemethod(manifest, previous_state)
     assert not search_manifest_using_method(manifest, method, "modified")
     assert not search_manifest_using_method(manifest, method, "new")
-    assert not search_manifest_using_method(manifest, method, "new")
     assert not search_manifest_using_method(manifest, method, "modified.configs")
     assert not search_manifest_using_method(manifest, method, "modified.persisted_descriptions")
     assert not search_manifest_using_method(manifest, method, "modified.relation")
@@ -1263,6 +1262,14 @@ def test_select_state_nothing(manifest, previous_state):
         search_manifest_using_method(manifest, method, "new")
     assert "no comparison manifest" in str(exc.value)
 
+    with pytest.raises(dbt.exceptions.DbtRuntimeError) as exc:
+        search_manifest_using_method(manifest, method, "unmodified")
+    assert "no comparison manifest" in str(exc.value)
+
+    with pytest.raises(dbt.exceptions.DbtRuntimeError) as exc:
+        search_manifest_using_method(manifest, method, "old")
+    assert "no comparison manifest" in str(exc.value)
+
 
 def test_select_state_added_model(manifest, previous_state):
     add_node(manifest, make_model("pkg", "another_model", "select 1 as id"))
@@ -1270,6 +1277,10 @@ def test_select_state_added_model(manifest, previous_state):
     assert search_manifest_using_method(manifest, method, "modified") == {"another_model"}
     assert search_manifest_using_method(manifest, method, "new") == {"another_model"}
     assert search_manifest_using_method(manifest, method, "modified.body") == {"another_model"}
+
+    # none of these
+    assert not {"another_model"} in search_manifest_using_method(manifest, method, "old")
+    assert not {"another_model"} in search_manifest_using_method(manifest, method, "unmodified")
 
 
 def test_select_state_changed_model_sql(manifest, previous_state, view_model):
@@ -1282,6 +1293,8 @@ def test_select_state_changed_model_sql(manifest, previous_state, view_model):
 
     # none of these
     assert not search_manifest_using_method(manifest, method, "new")
+    assert not {"view_model"} in search_manifest_using_method(manifest, method, "old")
+    assert not {"view_model"} in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.configs")
     assert not search_manifest_using_method(manifest, method, "modified.persisted_descriptions")
     assert not search_manifest_using_method(manifest, method, "modified.relation")
@@ -1296,6 +1309,10 @@ def test_select_state_changed_model_fqn(manifest, previous_state, view_model):
     assert search_manifest_using_method(manifest, method, "modified") == {"view_model"}
     assert not search_manifest_using_method(manifest, method, "new")
 
+    # none of these
+    assert not {"view_model"} in search_manifest_using_method(manifest, method, "old")
+    assert not {"view_model"} in search_manifest_using_method(manifest, method, "unmodified")
+
 
 def test_select_state_added_seed(manifest, previous_state):
     add_node(manifest, make_seed("pkg", "another_seed"))
@@ -1303,12 +1320,17 @@ def test_select_state_added_seed(manifest, previous_state):
     assert search_manifest_using_method(manifest, method, "modified") == {"another_seed"}
     assert search_manifest_using_method(manifest, method, "new") == {"another_seed"}
 
+    # none of these
+    assert not {"another_seed"} in search_manifest_using_method(manifest, method, "old")
+    assert not {"another_seed"} in search_manifest_using_method(manifest, method, "unmodified")
+
 
 def test_select_state_changed_seed_checksum_sha_to_sha(manifest, previous_state, seed):
     change_node(manifest, seed.replace(checksum=FileHash.from_contents("changed")))
     method = statemethod(manifest, previous_state)
     assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
 
 
 def test_select_state_changed_seed_checksum_path_to_path(manifest, previous_state, seed):
@@ -1330,6 +1352,16 @@ def test_select_state_changed_seed_checksum_path_to_path(manifest, previous_stat
     with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert search_manifest_using_method(manifest, method, "old")
+        warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert search_manifest_using_method(manifest, method, "unmodified")
+        warn_or_error_patch.assert_called_once()
+        event = warn_or_error_patch.call_args[0][0]
+        assert type(event).__name__ == "SeedExceedsLimitSamePath"
+        msg = event.message()
+        assert msg.startswith("Found a seed (pkg.seed) >1MB in size")
 
 
 def test_select_state_changed_seed_checksum_sha_to_path(manifest, previous_state, seed):
@@ -1347,6 +1379,16 @@ def test_select_state_changed_seed_checksum_sha_to_path(manifest, previous_state
     with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert search_manifest_using_method(manifest, method, "old")
+        warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert search_manifest_using_method(manifest, method, "unmodified")
+        warn_or_error_patch.assert_called_once()
+        event = warn_or_error_patch.call_args[0][0]
+        assert type(event).__name__ == "SeedIncreased"
+        msg = event.message()
+        assert msg.startswith("Found a seed (pkg.seed) >1MB in size")
 
 
 def test_select_state_changed_seed_checksum_path_to_sha(manifest, previous_state, seed):
@@ -1361,6 +1403,12 @@ def test_select_state_changed_seed_checksum_path_to_sha(manifest, previous_state
     with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
         assert not search_manifest_using_method(manifest, method, "new")
         warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
+        warn_or_error_patch.assert_not_called()
+    with mock.patch("dbt.contracts.graph.nodes.warn_or_error") as warn_or_error_patch:
+        assert "seed" in search_manifest_using_method(manifest, method, "old")
+        warn_or_error_patch.assert_not_called()
 
 
 def test_select_state_changed_seed_fqn(manifest, previous_state, seed):
@@ -1368,6 +1416,8 @@ def test_select_state_changed_seed_fqn(manifest, previous_state, seed):
     method = statemethod(manifest, previous_state)
     assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
 
 
 def test_select_state_changed_seed_relation_documented(manifest, previous_state, seed):
@@ -1376,7 +1426,9 @@ def test_select_state_changed_seed_relation_documented(manifest, previous_state,
     method = statemethod(manifest, previous_state)
     assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
     assert search_manifest_using_method(manifest, method, "modified.configs") == {"seed"}
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.body")
     assert not search_manifest_using_method(manifest, method, "modified.persisted_descriptions")
 
@@ -1391,7 +1443,9 @@ def test_select_state_changed_seed_relation_documented_nodocs(manifest, previous
     assert search_manifest_using_method(manifest, method, "modified.persisted_descriptions") == {
         "seed"
     }
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.configs")
 
 
@@ -1405,7 +1459,9 @@ def test_select_state_changed_seed_relation_documented_withdocs(manifest, previo
     assert search_manifest_using_method(manifest, method, "modified.persisted_descriptions") == {
         "seed"
     }
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
 
 
 def test_select_state_changed_seed_columns_documented(manifest, previous_state, seed):
@@ -1415,7 +1471,9 @@ def test_select_state_changed_seed_columns_documented(manifest, previous_state, 
     method = statemethod(manifest, previous_state)
     assert search_manifest_using_method(manifest, method, "modified") == {"seed"}
     assert search_manifest_using_method(manifest, method, "modified.configs") == {"seed"}
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.persisted_descriptions")
 
 
@@ -1433,7 +1491,9 @@ def test_select_state_changed_seed_columns_documented_nodocs(manifest, previous_
     assert search_manifest_using_method(manifest, method, "modified.persisted_descriptions") == {
         "seed"
     }
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.configs")
 
 
@@ -1451,7 +1511,9 @@ def test_select_state_changed_seed_columns_documented_withdocs(manifest, previou
     assert search_manifest_using_method(manifest, method, "modified.persisted_descriptions") == {
         "seed"
     }
+    assert "seed" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "seed" not in search_manifest_using_method(manifest, method, "unmodified")
     assert not search_manifest_using_method(manifest, method, "modified.configs")
 
 
@@ -1468,7 +1530,11 @@ def test_select_state_changed_test_macro_sql(
     assert search_manifest_using_method(manifest, method, "modified.macros") == {
         "not_null_table_model_id"
     }
+    assert "not_null_table_model_id" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "not_null_table_model_id" not in search_manifest_using_method(
+        manifest, method, "unmodified"
+    )
 
 
 def test_select_state_changed_test_macros(manifest, previous_state):
@@ -1505,7 +1571,11 @@ def test_select_state_changed_test_macros(manifest, previous_state):
         "model1",
         "model2",
     }
+    assert "model1" and "model2" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "model1" and "model2" not in search_manifest_using_method(
+        manifest, method, "unmodified"
+    )
 
 
 def test_select_state_changed_test_macros_with_upstream_change(manifest, previous_state):
@@ -1554,4 +1624,8 @@ def test_select_state_changed_test_macros_with_upstream_change(manifest, previou
         "model1",
         "model2",
     }
+    assert "model1" and "model2" in search_manifest_using_method(manifest, method, "old")
     assert not search_manifest_using_method(manifest, method, "new")
+    assert "model1" and "model2" not in search_manifest_using_method(
+        manifest, method, "unmodified"
+    )

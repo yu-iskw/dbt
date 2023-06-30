@@ -542,6 +542,11 @@ class StateSelectorMethod(SelectorMethod):
         upstream_macro_change = self.check_macros_modified(new)
         return different_contents or upstream_macro_change
 
+    def check_unmodified_content(
+        self, old: Optional[SelectorTarget], new: SelectorTarget, adapter_type: str
+    ) -> bool:
+        return not self.check_modified_content(old, new, adapter_type)
+
     def check_modified_macros(self, old, new: SelectorTarget) -> bool:
         return self.check_macros_modified(new)
 
@@ -586,8 +591,10 @@ class StateSelectorMethod(SelectorMethod):
         state_checks = {
             # it's new if there is no old version
             "new": lambda old, new: old is None,
+            "old": lambda old, new: old is not None,
             # use methods defined above to compare properties of old + new
             "modified": self.check_modified_content,
+            "unmodified": self.check_unmodified_content,
             "modified.body": self.check_modified_factory("same_body"),
             "modified.configs": self.check_modified_factory("same_config"),
             "modified.persisted_descriptions": self.check_modified_factory(
@@ -619,7 +626,11 @@ class StateSelectorMethod(SelectorMethod):
                 previous_node = manifest.metrics[node]
 
             keyword_args = {}
-            if checker.__name__ in ["same_contract", "check_modified_content"]:
+            if checker.__name__ in [
+                "same_contract",
+                "check_modified_content",
+                "check_unmodified_content",
+            ]:
                 keyword_args["adapter_type"] = adapter_type  # type: ignore
 
             if checker(previous_node, real_node, **keyword_args):  # type: ignore
