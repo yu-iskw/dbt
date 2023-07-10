@@ -844,10 +844,13 @@ class ManifestLoader:
         return False
 
     def read_manifest_for_partial_parse(self) -> Optional[Manifest]:
-        if not get_flags().PARTIAL_PARSE:
+        flags = get_flags()
+        if not flags.PARTIAL_PARSE:
             fire_event(PartialParsingNotEnabled())
             return None
-        path = os.path.join(self.root_project.project_target_path, PARTIAL_PARSE_FILE_NAME)
+        path = flags.PARTIAL_PARSE_FILE_PATH or os.path.join(
+            self.root_project.project_target_path, PARTIAL_PARSE_FILE_NAME
+        )
 
         reparse_reason = None
 
