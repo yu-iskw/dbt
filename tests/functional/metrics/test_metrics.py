@@ -22,6 +22,10 @@ from tests.functional.metrics.fixtures import (
     derived_metric_yml,
     invalid_metric_without_timestamp_with_time_grains_yml,
     invalid_metric_without_timestamp_with_window_yml,
+    metricflow_time_spine_sql,
+    semantic_model_people_yml,
+    semantic_model_purchasing_yml,
+    purchasing_model_sql,
 )
 
 
@@ -30,6 +34,8 @@ class TestSimpleMetrics:
     def models(self):
         return {
             "people_metrics.yml": models_people_metrics_yml,
+            "metricflow_time_spine.sql": metricflow_time_spine_sql,
+            "semantic_model_people.yml": semantic_model_people_yml,
             "people.sql": models_people_sql,
         }
 
@@ -197,12 +203,42 @@ class TestInvalidDerivedMetrics:
             run_dbt(["run"])
 
 
+class TestMetricDependsOn:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "people.sql": models_people_sql,
+            "metricflow_time_spine.sql": metricflow_time_spine_sql,
+            "semantic_models.yml": semantic_model_people_yml,
+            "people_metrics.yml": models_people_metrics_yml,
+        }
+
+    def test_metric_depends_on(self, project):
+        manifest = run_dbt(["parse"])
+        assert isinstance(manifest, Manifest)
+
+        expected_depends_on_for_number_of_people = ["semantic_model.test.semantic_people"]
+        expected_depends_on_for_average_tenure = [
+            "metric.test.collective_tenure",
+            "metric.test.number_of_people",
+        ]
+
+        number_of_people_metric = manifest.metrics["metric.test.number_of_people"]
+        assert number_of_people_metric.depends_on.nodes == expected_depends_on_for_number_of_people
+
+        average_tenure_metric = manifest.metrics["metric.test.average_tenure"]
+        assert average_tenure_metric.depends_on.nodes == expected_depends_on_for_average_tenure
+
+
 class TestDerivedMetric:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "derived_metric.yml": derived_metric_yml,
             "downstream_model.sql": downstream_model_sql,
+            "purchasing.sql": purchasing_model_sql,
+            "metricflow_time_spine.sql": metricflow_time_spine_sql,
+            "semantic_models.yml": semantic_model_purchasing_yml,
+            "derived_metric.yml": derived_metric_yml,
         }
 
     # not strictly necessary to use "real" mock data for this test
@@ -214,7 +250,6 @@ class TestDerivedMetric:
             "mock_purchase_data.csv": mock_purchase_data_csv,
         }
 
-    @pytest.mark.skip("TODO bring back once we start populating metric `depends_on`")
     def test_derived_metric(
         self,
         project,
@@ -245,7 +280,6 @@ class TestDerivedMetric:
 
         # make sure the 'expression' metric depends on the two upstream metrics
         derived_metric = manifest.metrics["metric.test.average_order_value"]
-        assert sorted(derived_metric.metrics) == [["count_orders"], ["sum_order_revenue"]]
         assert sorted(derived_metric.depends_on.nodes) == [
             "metric.test.count_orders",
             "metric.test.sum_order_revenue",
@@ -264,7 +298,6 @@ class TestDerivedMetric:
                 "type",
                 "type_params",
                 "filter",
-                "window",
             ]:
                 expected_value = getattr(parsed_metric_node, property)
                 assert f"{property}: {expected_value}" in compiled_code

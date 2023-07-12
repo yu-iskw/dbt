@@ -17,9 +17,36 @@ mock_purchase_data_csv = """purchased_at,payment_type,payment_total
 models_people_sql = """
 select 1 as id, 'Drew' as first_name, 'Banin' as last_name, 'yellow' as favorite_color, true as loves_dbt, 5 as tenure, current_timestamp as created_at
 union all
-select 1 as id, 'Jeremy' as first_name, 'Cohen' as last_name, 'indigo' as favorite_color, true as loves_dbt, 4 as tenure, current_timestamp as created_at
+select 2 as id, 'Jeremy' as first_name, 'Cohen' as last_name, 'indigo' as favorite_color, true as loves_dbt, 4 as tenure, current_timestamp as created_at
 union all
-select 1 as id, 'Callum' as first_name, 'McCann' as last_name, 'emerald' as favorite_color, true as loves_dbt, 0 as tenure, current_timestamp as created_at
+select 3 as id, 'Callum' as first_name, 'McCann' as last_name, 'emerald' as favorite_color, true as loves_dbt, 0 as tenure, current_timestamp as created_at
+"""
+
+semantic_model_people_yml = """
+version: 2
+
+semantic_models:
+  - name: semantic_people
+    model: ref('people')
+    dimensions:
+      - name: favorite_color
+        type: categorical
+      - name: created_at
+        type: TIME
+        type_params:
+          time_granularity: day
+    measures:
+      - name: years_tenure
+        agg: SUM
+        expr: tenure
+      - name: people
+        agg: count
+        expr: id
+    entities:
+      - name: id
+        type: primary
+    defaults:
+      agg_time_dimension: created_at
 """
 
 basic_metrics_yml = """
@@ -61,6 +88,10 @@ metrics:
       metrics:
         - average_tenure
       expr: "average_tenure + 1"
+"""
+
+metricflow_time_spine_sql = """
+SELECT to_date('02/20/2023, 'mm/dd/yyyy') as date_day
 """
 
 models_people_metrics_yml = """
@@ -296,8 +327,7 @@ downstream_model_sql = """
         label: {{ m.label }}
         type: {{ m.type }}
         type_params: {{ m.type_params }}
-        filters {{ m.filter }}
-        window: {{ m.window }}
+        filter: {{ m.filter }}
     {% endfor %}
 
 {% endif %}
@@ -343,6 +373,35 @@ metrics:
 
       dimensions:
         - payment_type
+"""
+
+purchasing_model_sql = """
+select purchased_at, payment_type, payment_total from {{ ref('mock_purchase_data') }}
+"""
+
+semantic_model_purchasing_yml = """
+version: 2
+
+semantic_models:
+  - name: semantic_purchasing
+    model: ref('purchasing')
+    measures:
+      - name: num_orders
+        agg: COUNT
+        expr: purchased_at
+      - name: order_revenue
+        agg: SUM
+        expr: payment_total
+    dimensions:
+      - name: purchased_at
+        type: TIME
+    entities:
+      - name: purchase
+        type: primary
+        expr: '1'
+    defaults:
+      agg_time_dimension: purchased_at
+
 """
 
 derived_metric_yml = """
