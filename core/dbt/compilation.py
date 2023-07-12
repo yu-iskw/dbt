@@ -48,9 +48,10 @@ def print_compile_stats(stats):
         NodeType.Analysis: "analysis",
         NodeType.Macro: "macro",
         NodeType.Operation: "operation",
-        NodeType.Seed: "seed file",
+        NodeType.Seed: "seed",
         NodeType.Source: "source",
         NodeType.Exposure: "exposure",
+        NodeType.SemanticModel: "semantic model",
         NodeType.Metric: "metric",
         NodeType.Group: "group",
     }
@@ -63,7 +64,8 @@ def print_compile_stats(stats):
         resource_counts = {k.pluralize(): v for k, v in results.items()}
         dbt.tracking.track_resource_counts(resource_counts)
 
-    stat_line = ", ".join([pluralize(ct, names.get(t)) for t, ct in results.items() if t in names])
+    # do not include resource types that are not actually defined in the project
+    stat_line = ", ".join([pluralize(ct, names.get(t)) for t, ct in stats.items() if t in names])
 
     fire_event(FoundStats(stat_line=stat_line))
 
@@ -82,16 +84,16 @@ def _generate_stats(manifest: Manifest):
         if _node_enabled(node):
             stats[node.resource_type] += 1
 
-    for source in manifest.sources.values():
-        stats[source.resource_type] += 1
-    for exposure in manifest.exposures.values():
-        stats[exposure.resource_type] += 1
-    for metric in manifest.metrics.values():
-        stats[metric.resource_type] += 1
-    for macro in manifest.macros.values():
-        stats[macro.resource_type] += 1
-    for group in manifest.groups.values():
-        stats[group.resource_type] += 1
+    # Disabled nodes don't appear in the following collections, so we don't check.
+    stats[NodeType.Source] += len(manifest.sources)
+    stats[NodeType.Exposure] += len(manifest.exposures)
+    stats[NodeType.Metric] += len(manifest.metrics)
+    stats[NodeType.Macro] += len(manifest.macros)
+    stats[NodeType.Group] += len(manifest.groups)
+    stats[NodeType.SemanticModel] += len(manifest.semantic_models)
+
+    # TODO: should we be counting dimensions + entities?
+
     return stats
 
 
