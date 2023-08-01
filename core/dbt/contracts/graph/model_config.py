@@ -544,6 +544,7 @@ class NodeConfig(NodeAndTestConfig):
 @dataclass
 class SeedConfig(NodeConfig):
     materialized: str = "seed"
+    delimiter: str = ","
     quote_columns: Optional[bool] = None
 
     @classmethod
