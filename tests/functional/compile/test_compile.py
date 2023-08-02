@@ -49,9 +49,8 @@ class TestIntrospectFlag:
         assert get_lines("first_model") == ["select 1 as fun"]
         assert any("_test_compile as schema" in line for line in get_lines("second_model"))
 
-    @pytest.mark.skip("Investigate flaky test #7179")
     def test_no_introspect(self, project):
-        with pytest.raises(DbtRuntimeError):
+        with pytest.raises(DbtRuntimeError, match="connection never acquired for thread"):
             run_dbt(["compile", "--no-introspect"])
 
 
