@@ -1835,8 +1835,7 @@
         "deprecation_date": {
           "anyOf": [
             {
-              "type": "string",
-              "format": "date-time"
+              "type": "string"
             },
             {
               "type": "null"
@@ -5242,6 +5241,17 @@
         "enabled": {
           "type": "boolean",
           "default": true
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "additionalProperties": true
@@ -5369,7 +5379,24 @@
         "config": {
           "$ref": "#/$defs/SemanticModelConfig"
         },
+        "unrendered_config": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          }
+        },
         "primary_entity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "group": {
           "anyOf": [
             {
               "type": "string"
@@ -5399,6 +5426,7 @@
       "title": "WritableManifest",
       "properties": {
         "metadata": {
+          "description": "Metadata about the manifest",
           "$ref": "#/$defs/ManifestMetadata"
         },
         "nodes": {

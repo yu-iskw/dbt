@@ -214,6 +214,7 @@ class Project(dbtClassMixin, Replaceable):
     sources: Dict[str, Any] = field(default_factory=dict)
     tests: Dict[str, Any] = field(default_factory=dict)
     metrics: Dict[str, Any] = field(default_factory=dict)
+    semantic_models: Dict[str, Any] = field(default_factory=dict)
     exposures: Dict[str, Any] = field(default_factory=dict)
     vars: Optional[Dict[str, Any]] = field(
         default=None,
@@ -249,6 +250,7 @@ class Project(dbtClassMixin, Replaceable):
             "require_dbt_version": "require-dbt-version",
             "query_comment": "query-comment",
             "restrict_access": "restrict-access",
+            "semantic_models": "semantic-models",
         }
 
     @classmethod
