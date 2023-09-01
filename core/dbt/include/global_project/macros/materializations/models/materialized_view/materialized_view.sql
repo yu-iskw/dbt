@@ -57,7 +57,7 @@
     {% if existing_relation is none %}
         {% set build_sql = get_create_materialized_view_as_sql(target_relation, sql) %}
     {% elif full_refresh_mode or not existing_relation.is_materialized_view %}
-        {% set build_sql = get_replace_materialized_view_as_sql(target_relation, sql, existing_relation, backup_relation, intermediate_relation) %}
+        {% set build_sql = get_replace_sql(existing_relation, target_relation, sql) %}
     {% else %}
 
         -- get config options

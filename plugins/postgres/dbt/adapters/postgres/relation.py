@@ -7,6 +7,7 @@ from dbt.adapters.relation_configs import (
     RelationResults,
 )
 from dbt.context.providers import RuntimeConfigObject
+from dbt.contracts.relation import RelationType
 from dbt.exceptions import DbtRuntimeError
 
 from dbt.adapters.postgres.relation_configs import (
@@ -20,6 +21,12 @@ from dbt.adapters.postgres.relation_configs import (
 
 @dataclass(frozen=True, eq=False, repr=False)
 class PostgresRelation(BaseRelation):
+    relations_that_can_be_renamed = [
+        RelationType.View,
+        RelationType.Table,
+        RelationType.MaterializedView,
+    ]
+
     def __post_init__(self):
         # Check for length of Postgres table/view names.
         # Check self.type to exclude test relation identifiers
