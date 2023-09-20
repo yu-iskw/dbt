@@ -95,7 +95,6 @@ def _get_stdout_config(
     level: EventLevel,
     log_cache_events: bool,
 ) -> LoggerConfig:
-
     return LoggerConfig(
         name="stdout_log",
         level=level,
@@ -127,6 +126,7 @@ def _get_logfile_config(
     level: EventLevel,
     log_file_max_bytes: int,
 ) -> LoggerConfig:
+
     return LoggerConfig(
         name="file_log",
         line_format=line_format,
