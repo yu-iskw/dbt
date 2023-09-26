@@ -86,6 +86,44 @@ semantic_models:
       agg_time_dimension: created_at
 """
 
+semantic_model_descriptions = """
+{% docs semantic_model_description %} foo {% enddocs %}
+{% docs dimension_description %} bar {% enddocs %}
+{% docs measure_description %} baz {% enddocs %}
+{% docs entity_description %} qux {% enddocs %}
+"""
+
+semantic_model_people_yml_with_docs = """
+version: 2
+
+semantic_models:
+  - name: semantic_people
+    model: ref('people')
+    description: "{{ doc('semantic_model_description') }}"
+    dimensions:
+      - name: favorite_color
+        type: categorical
+        description: "{{ doc('dimension_description') }}"
+      - name: created_at
+        type: TIME
+        type_params:
+          time_granularity: day
+    measures:
+      - name: years_tenure
+        agg: SUM
+        expr: tenure
+        description: "{{ doc('measure_description') }}"
+      - name: people
+        agg: count
+        expr: id
+    entities:
+      - name: id
+        description: "{{ doc('entity_description') }}"
+        type: primary
+    defaults:
+      agg_time_dimension: created_at
+"""
+
 enabled_semantic_model_people_yml = """
 version: 2
 
