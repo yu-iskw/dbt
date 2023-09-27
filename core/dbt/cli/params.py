@@ -423,6 +423,13 @@ send_anonymous_usage_stats = click.option(
     default=True,
 )
 
+clean_project_files_only = click.option(
+    "--clean-project-files-only / --no-clean-project-files-only",
+    envvar="DBT_CLEAN_PROJECT_FILES_ONLY",
+    help="If disabled, dbt clean will delete all paths specified in clean-paths, even if they're outside the dbt project.",
+    default=True,
+)
+
 show = click.option(
     "--show",
     envvar=None,

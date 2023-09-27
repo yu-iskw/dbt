@@ -224,6 +224,7 @@ def build(ctx, **kwargs):
 @cli.command("clean")
 @click.pass_context
 @global_flags
+@p.clean_project_files_only
 @p.profile
 @p.profiles_dir
 @p.project_dir
