@@ -5497,6 +5497,12 @@
             }
           ],
           "default": null
+        },
+        "meta": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": true
@@ -5634,6 +5640,12 @@
         },
         "config": {
           "$ref": "#/$defs/SemanticModelConfig"
+        },
+        "meta": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          }
         },
         "unrendered_config": {
           "type": "object",
