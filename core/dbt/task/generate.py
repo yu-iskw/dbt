@@ -24,6 +24,8 @@ from dbt.contracts.results import (
     CatalogArtifact,
 )
 from dbt.exceptions import DbtInternalError, AmbiguousCatalogMatchError
+from dbt.graph import ResourceTypeSelector
+from dbt.node_types import NodeType
 from dbt.include.global_project import DOCS_INDEX_FILE_PATH
 from dbt.events.functions import fire_event
 from dbt.events.types import (
@@ -218,6 +220,11 @@ class GenerateTask(CompileTask):
             DOCS_INDEX_FILE_PATH, os.path.join(self.config.project_target_path, "index.html")
         )
 
+        # Get the list of nodes that have been selected
+        selected_nodes = None
+        if self.job_queue is not None:
+            selected_nodes = self.job_queue.get_selected_nodes()
+
         for asset_path in self.config.asset_paths:
             to_asset_path = os.path.join(self.config.project_target_path, asset_path)
 
@@ -237,7 +244,8 @@ class GenerateTask(CompileTask):
             adapter = get_adapter(self.config)
             with adapter.connection_named("generate_catalog"):
                 fire_event(BuildingCatalog())
-                catalog_table, exceptions = adapter.get_catalog(self.manifest)
+                # This generates the catalog as an agate.Table
+                catalog_table, exceptions = adapter.get_catalog(self.manifest, selected_nodes)
 
         catalog_data: List[PrimitiveDict] = [
             dict(zip(catalog_table.column_names, map(dbt.utils._coerce_decimal, row)))
@@ -268,6 +276,16 @@ class GenerateTask(CompileTask):
             fire_event(WriteCatalogFailure(num_exceptions=len(exceptions)))
         fire_event(CatalogWritten(path=os.path.abspath(path)))
         return results
+
+    def get_node_selector(self) -> ResourceTypeSelector:
+        if self.manifest is None or self.graph is None:
+            raise DbtInternalError("manifest and graph must be set to perform node selection")
+        return ResourceTypeSelector(
+            graph=self.graph,
+            manifest=self.manifest,
+            previous_state=self.previous_state,
+            resource_types=NodeType.executable(),
+        )
 
     def get_catalog_results(
         self,
