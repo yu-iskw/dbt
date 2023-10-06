@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 import agate
 
 from dbt.dataclass_schema import ValidationError
+from dbt.clients.system import load_file_contents
 
 from .compile import CompileTask
 
@@ -38,7 +39,9 @@ from dbt.parser.manifest import write_manifest
 import dbt.utils
 import dbt.compilation
 import dbt.exceptions
-
+from dbt.constants import (
+    MANIFEST_FILE_NAME,
+)
 
 CATALOG_FILENAME = "catalog.json"
 
@@ -267,14 +270,32 @@ class GenerateTask(CompileTask):
             errors=errors,
         )
 
-        path = os.path.join(self.config.project_target_path, CATALOG_FILENAME)
-        results.write(path)
+        catalog_path = os.path.join(self.config.project_target_path, CATALOG_FILENAME)
+        results.write(catalog_path)
         if self.args.compile:
             write_manifest(self.manifest, self.config.project_target_path)
 
+        if self.args.static:
+
+            # Read manifest.json and catalog.json
+            read_manifest_data = load_file_contents(
+                os.path.join(self.config.project_target_path, MANIFEST_FILE_NAME)
+            )
+            read_catalog_data = load_file_contents(catalog_path)
+
+            # Create new static index file contents
+            index_data = load_file_contents(DOCS_INDEX_FILE_PATH)
+            index_data = index_data.replace('"MANIFEST.JSON INLINE DATA"', read_manifest_data)
+            index_data = index_data.replace('"CATALOG.JSON INLINE DATA"', read_catalog_data)
+
+            # Write out the new index file
+            static_index_path = os.path.join(self.config.project_target_path, "static_index.html")
+            with open(static_index_path, "wb") as static_index_file:
+                static_index_file.write(bytes(index_data, "utf8"))
+
         if exceptions:
             fire_event(WriteCatalogFailure(num_exceptions=len(exceptions)))
-        fire_event(CatalogWritten(path=os.path.abspath(path)))
+        fire_event(CatalogWritten(path=os.path.abspath(catalog_path)))
         return results
 
     def get_node_selector(self) -> ResourceTypeSelector:
