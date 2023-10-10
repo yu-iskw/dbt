@@ -1237,12 +1237,24 @@ class ProviderContext(ManifestContext):
 
     @contextproperty("model")
     def ctx_model(self) -> Dict[str, Any]:
-        ret = self.model.to_dict(omit_none=True)
+        model_dct = self.model.to_dict(omit_none=True)
         # Maintain direct use of compiled_sql
         # TODO add depreciation logic[CT-934]
-        if "compiled_code" in ret:
-            ret["compiled_sql"] = ret["compiled_code"]
-        return ret
+        if "compiled_code" in model_dct:
+            model_dct["compiled_sql"] = model_dct["compiled_code"]
+
+        if (
+            hasattr(self.model, "contract")
+            and self.model.contract.alias_types is True
+            and "columns" in model_dct
+        ):
+            for column in model_dct["columns"].values():
+                if "data_type" in column:
+                    orig_data_type = column["data_type"]
+                    # translate data_type to value in Column.TYPE_LABELS
+                    new_data_type = self.adapter.Column.translate_type(orig_data_type)
+                    column["data_type"] = new_data_type
+        return model_dct
 
     @contextproperty()
     def pre_hooks(self) -> Optional[List[Dict[str, Any]]]:
