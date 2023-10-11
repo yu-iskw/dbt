@@ -1297,6 +1297,19 @@ message WarnStateTargetEqualMsg {
     WarnStateTargetEqual data = 2;
 }
 
+// I073
+message FreshnessConfigProblem {
+    string msg = 1;
+}
+
+message FreshnessConfigProblemMsg {
+    EventInfo info = 1;
+    FreshnessConfigProblem data = 2;
+}
+
+
+
+
 // M - Deps generation
 
 // M001

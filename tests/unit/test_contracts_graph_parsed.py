@@ -2071,14 +2071,6 @@ def test_complex_source_definition(
     pickle.loads(pickle.dumps(node))
 
 
-def test_source_no_loaded_at(complex_parsed_source_definition_object):
-    node = complex_parsed_source_definition_object
-    assert node.has_freshness is True
-    # no loaded_at_field -> does not have freshness
-    node.loaded_at_field = None
-    assert node.has_freshness is False
-
-
 def test_source_no_freshness(complex_parsed_source_definition_object):
     node = complex_parsed_source_definition_object
     assert node.has_freshness is True

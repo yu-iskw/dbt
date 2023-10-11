@@ -1302,8 +1302,8 @@ class SourceDefinition(NodeInfoMixin, ParsedSourceMandatory):
         return []
 
     @property
-    def has_freshness(self):
-        return bool(self.freshness) and self.loaded_at_field is not None
+    def has_freshness(self) -> bool:
+        return bool(self.freshness)
 
     @property
     def search_name(self):

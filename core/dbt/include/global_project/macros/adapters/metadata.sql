@@ -85,3 +85,12 @@
   {{ exceptions.raise_not_implemented(
     'get_relations macro not implemented for adapter '+adapter.type()) }}
 {% endmacro %}
+
+{% macro get_relation_last_modified(information_schema, relations) %}
+  {{ return(adapter.dispatch('get_relation_last_modified', 'dbt')(information_schema, relations)) }}
+{% endmacro %}
+
+{% macro default__get_relation_last_modified(information_schema, relations) %}
+  {{ exceptions.raise_not_implemented(
+    'get_relation_last_modified macro not implemented for adapter ' + adapter.type()) }}
+{% endmacro %}
