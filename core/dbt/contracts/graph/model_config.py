@@ -389,6 +389,27 @@ class SemanticModelConfig(BaseConfig):
 
 
 @dataclass
+class SavedQueryConfig(BaseConfig):
+    """Where config options for SavedQueries are stored.
+
+    This class is much like many other node config classes. It's likely that
+    this class will expand in the direction of what's in the `NodeAndTestConfig`
+    class. It might make sense to clean the various *Config classes into one at
+    some point.
+    """
+
+    enabled: bool = True
+    group: Optional[str] = field(
+        default=None,
+        metadata=CompareBehavior.Exclude.meta(),
+    )
+    meta: Dict[str, Any] = field(
+        default_factory=dict,
+        metadata=MergeBehavior.Update.meta(),
+    )
+
+
+@dataclass
 class MetricConfig(BaseConfig):
     enabled: bool = True
     group: Optional[str] = field(
@@ -705,6 +726,7 @@ class SnapshotConfig(EmptySnapshotConfig):
 RESOURCE_TYPES: Dict[NodeType, Type[BaseConfig]] = {
     NodeType.Metric: MetricConfig,
     NodeType.SemanticModel: SemanticModelConfig,
+    NodeType.SavedQuery: SavedQueryConfig,
     NodeType.Exposure: ExposureConfig,
     NodeType.Source: SourceConfig,
     NodeType.Seed: SeedConfig,

@@ -18,6 +18,7 @@ from dbt.contracts.graph.nodes import (
     ResultNode,
     ManifestNode,
     ModelNode,
+    SavedQuery,
     SemanticModel,
 )
 from dbt.contracts.graph.unparsed import UnparsedVersion
@@ -55,6 +56,7 @@ class MethodName(StrEnum):
     Wildcard = "wildcard"
     Version = "version"
     SemanticModel = "semantic_model"
+    SavedQuery = "saved_query"
 
 
 def is_selected_node(fqn: List[str], node_selector: str, is_versioned: bool) -> bool:
@@ -155,6 +157,16 @@ class SelectorMethod(metaclass=abc.ABCMeta):
             if unique_id not in included_nodes:
                 continue
             yield unique_id, semantic_model
+
+    def saved_query_nodes(
+        self, included_nodes: Set[UniqueId]
+    ) -> Iterator[Tuple[UniqueId, SavedQuery]]:
+
+        for key, saved_query in self.manifest.saved_queries.items():
+            unique_id = UniqueId(key)
+            if unique_id not in included_nodes:
+                continue
+            yield unique_id, saved_query
 
     def all_nodes(
         self, included_nodes: Set[UniqueId]
@@ -355,6 +367,31 @@ class SemanticModelSelectorMethod(SelectorMethod):
             raise DbtRuntimeError(msg)
 
         for node, real_node in self.semantic_model_nodes(included_nodes):
+            if not fnmatch(real_node.package_name, target_package):
+                continue
+            if not fnmatch(real_node.name, target_name):
+                continue
+
+            yield node
+
+
+class SavedQuerySelectorMethod(SelectorMethod):
+    def search(self, included_nodes: Set[UniqueId], selector: str) -> Iterator[UniqueId]:
+        parts = selector.split(".")
+        target_package = SELECTOR_GLOB
+        if len(parts) == 1:
+            target_name = parts[0]
+        elif len(parts) == 2:
+            target_package, target_name = parts
+        else:
+            msg = (
+                'Invalid saved query selector value "{}". Saved queries must be of '
+                "the form ${{saved_query_name}} or "
+                "${{saved_query_package.saved_query_name}}"
+            ).format(selector)
+            raise DbtRuntimeError(msg)
+
+        for node, real_node in self.saved_query_nodes(included_nodes):
             if not fnmatch(real_node.package_name, target_package):
                 continue
             if not fnmatch(real_node.name, target_name):
@@ -803,6 +840,7 @@ class MethodManager:
         MethodName.SourceStatus: SourceStatusSelectorMethod,
         MethodName.Version: VersionSelectorMethod,
         MethodName.SemanticModel: SemanticModelSelectorMethod,
+        MethodName.SavedQuery: SavedQuerySelectorMethod,
     }
 
     def __init__(

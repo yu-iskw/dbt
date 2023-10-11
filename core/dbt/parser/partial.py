@@ -430,6 +430,11 @@ class PartialParsing:
                     semantic_model.name,
                     self.delete_schema_semantic_model,
                 )
+            elif unique_id in self.saved_manifest.saved_queries:
+                saved_query = self.saved_manifest.saved_queries[unique_id]
+                self._schedule_for_parsing(
+                    "saved_queries", saved_query, saved_query.name, self.delete_schema_saved_query
+                )
             elif unique_id in self.saved_manifest.macros:
                 macro = self.saved_manifest.macros[unique_id]
                 file_id = macro.file_id
@@ -676,6 +681,7 @@ class PartialParsing:
         handle_change("metrics", self.delete_schema_metric)
         handle_change("groups", self.delete_schema_group)
         handle_change("semantic_models", self.delete_schema_semantic_model)
+        handle_change("saved_queries", self.delete_schema_saved_query)
 
     def _handle_element_change(
         self, schema_file, saved_yaml_dict, new_yaml_dict, env_var_changes, dict_key: str, delete
@@ -892,6 +898,20 @@ class PartialParsing:
                         self.schedule_nodes_for_parsing(self.saved_manifest.child_map[unique_id])
                     self.saved_manifest.metrics.pop(unique_id)
                     schema_file.metrics.remove(unique_id)
+            elif unique_id in self.saved_manifest.disabled:
+                self.delete_disabled(unique_id, schema_file.file_id)
+
+    def delete_schema_saved_query(self, schema_file, saved_query_dict):
+        saved_query_name = saved_query_dict["name"]
+        saved_queries = schema_file.saved_queries.copy()
+        for unique_id in saved_queries:
+            if unique_id in self.saved_manifest.saved_queries:
+                saved_query = self.saved_manifest.saved_queries[unique_id]
+                if saved_query.name == saved_query_name:
+                    # Need to find everything that referenced this saved_query and schedule for parsing
+                    if unique_id in self.saved_manifest.child_map:
+                        self.schedule_nodes_for_parsing(self.saved_manifest.child_map[unique_id])
+                    self.saved_manifest.saved_queries.pop(unique_id)
             elif unique_id in self.saved_manifest.disabled:
                 self.delete_disabled(unique_id, schema_file.file_id)
 

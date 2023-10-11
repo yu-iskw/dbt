@@ -78,6 +78,11 @@ class SchemaYamlRenderer(BaseRenderer):
                 return False
             elif self._is_norender_key(keypath[0:]):
                 return False
+        elif self.key == "saved_queries":
+            if keypath[0] == "where":
+                return False
+            elif self._is_norender_key(keypath[0:]):
+                return False
         else:  # models, seeds, snapshots, analyses
             if self._is_norender_key(keypath[0:]):
                 return False

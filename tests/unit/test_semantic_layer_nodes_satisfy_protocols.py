@@ -8,6 +8,7 @@ from dbt.contracts.graph.nodes import (
     MetricTimeWindow,
     MetricTypeParams,
     NodeRelation,
+    SavedQuery,
     SemanticModel,
     WhereFilter,
 )
@@ -30,6 +31,7 @@ from dbt_semantic_interfaces.protocols import (
     measure as MeasureProtocols,
     metadata as MetadataProtocols,
     metric as MetricProtocols,
+    saved_query as SavedQueryProtocols,
     semantic_model as SemanticModelProtocols,
     WhereFilter as WhereFilterProtocol,
 )
@@ -40,6 +42,8 @@ from dbt_semantic_interfaces.type_enums import (
     MetricType,
     TimeGranularity,
 )
+from hypothesis import given
+from hypothesis.strategies import builds, none, text
 from typing import Protocol, runtime_checkable
 
 
@@ -133,6 +137,11 @@ class RuntimeCheckableMeasureAggregationParams(
 
 @runtime_checkable
 class RuntimeCheckableMetricTimeWindow(MetricProtocols.MetricTimeWindow, Protocol):
+    pass
+
+
+@runtime_checkable
+class RuntimeCheckableSavedQuery(SavedQueryProtocols.SavedQuery, Protocol):
     pass
 
 
@@ -460,3 +469,15 @@ def test_metric_type_params_satisfies_protocol(complex_metric_type_params):
 
 def test_non_additive_dimension_satisfies_protocol(non_additive_dimension):
     assert isinstance(non_additive_dimension, RuntimeCheckableNonAdditiveDimension)
+
+
+@given(
+    builds(
+        SavedQuery,
+        description=text() | none(),
+        label=text() | none(),
+        metadata=builds(SourceFileMetadata) | none(),
+    )
+)
+def test_saved_query_satisfies_protocol(saved_query: SavedQuery):
+    assert isinstance(saved_query, SavedQuery)

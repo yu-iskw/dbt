@@ -104,4 +104,6 @@ def upgrade_manifest_json(manifest: dict, manifest_schema_version: int) -> dict:
         doc_content["resource_type"] = "doc"
     if "semantic_models" not in manifest:
         manifest["semantic_models"] = {}
+    if "saved_queries" not in manifest:
+        manifest["saved_queries"] = {}
     return manifest

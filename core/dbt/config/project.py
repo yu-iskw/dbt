@@ -434,6 +434,7 @@ class PartialProject(RenderComponents):
         tests: Dict[str, Any]
         metrics: Dict[str, Any]
         semantic_models: Dict[str, Any]
+        saved_queries: Dict[str, Any]
         exposures: Dict[str, Any]
         vars_value: VarProvider
         dbt_cloud: Dict[str, Any]
@@ -446,6 +447,7 @@ class PartialProject(RenderComponents):
         tests = cfg.tests
         metrics = cfg.metrics
         semantic_models = cfg.semantic_models
+        saved_queries = cfg.saved_queries
         exposures = cfg.exposures
         if cfg.vars is None:
             vars_dict: Dict[str, Any] = {}
@@ -505,6 +507,7 @@ class PartialProject(RenderComponents):
             tests=tests,
             metrics=metrics,
             semantic_models=semantic_models,
+            saved_queries=saved_queries,
             exposures=exposures,
             vars=vars_value,
             config_version=cfg.config_version,
@@ -614,6 +617,7 @@ class Project:
     tests: Dict[str, Any]
     metrics: Dict[str, Any]
     semantic_models: Dict[str, Any]
+    saved_queries: Dict[str, Any]
     exposures: Dict[str, Any]
     vars: VarProvider
     dbt_version: List[VersionSpecifier]
@@ -691,6 +695,7 @@ class Project:
                 "tests": self.tests,
                 "metrics": self.metrics,
                 "semantic-models": self.semantic_models,
+                "saved-queries": self.saved_queries,
                 "exposures": self.exposures,
                 "vars": self.vars.to_dict(),
                 "require-dbt-version": [v.to_version_string() for v in self.dbt_version],

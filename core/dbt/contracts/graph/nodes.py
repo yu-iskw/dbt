@@ -59,7 +59,7 @@ from dbt_semantic_interfaces.references import (
 )
 from dbt_semantic_interfaces.references import MetricReference as DSIMetricReference
 from dbt_semantic_interfaces.type_enums import MetricType, TimeGranularity
-from dbt_semantic_interfaces.parsing.where_filter_parser import WhereFilterParser
+from dbt_semantic_interfaces.parsing.where_filter.where_filter_parser import WhereFilterParser
 
 from .model_config import (
     NodeConfig,
@@ -72,6 +72,7 @@ from .model_config import (
     EmptySnapshotConfig,
     SnapshotConfig,
     SemanticModelConfig,
+    SavedQueryConfig,
 )
 
 
@@ -1408,9 +1409,18 @@ class WhereFilter(dbtClassMixin):
 
 
 @dataclass
+class WhereFilterIntersection(dbtClassMixin):
+    where_filters: List[WhereFilter]
+
+    @property
+    def filter_expression_parameter_sets(self) -> Sequence[Tuple[str, FilterCallParameterSets]]:
+        raise NotImplementedError
+
+
+@dataclass
 class MetricInputMeasure(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     alias: Optional[str] = None
     join_to_timespine: bool = False
     fill_nulls_with: Optional[int] = None
@@ -1431,7 +1441,7 @@ class MetricTimeWindow(dbtClassMixin):
 @dataclass
 class MetricInput(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     alias: Optional[str] = None
     offset_window: Optional[MetricTimeWindow] = None
     offset_to_grain: Optional[TimeGranularity] = None
@@ -1468,7 +1478,7 @@ class Metric(GraphNode):
     label: str
     type: MetricType
     type_params: MetricTypeParams
-    filter: Optional[WhereFilter] = None
+    filter: Optional[WhereFilterIntersection] = None
     metadata: Optional[SourceFileMetadata] = None
     resource_type: Literal[NodeType.Metric]
     meta: Dict[str, Any] = field(default_factory=dict)
@@ -1729,6 +1739,69 @@ class SemanticModel(GraphNode):
 
 
 # ====================================
+# SavedQuery and related classes
+# ====================================
+
+
+@dataclass
+class SavedQuery(GraphNode):
+    metrics: List[str]
+    group_bys: List[str]
+    where: Optional[WhereFilterIntersection]
+    description: Optional[str] = None
+    label: Optional[str] = None
+    metadata: Optional[SourceFileMetadata] = None
+    config: SavedQueryConfig = field(default_factory=SavedQueryConfig)
+    unrendered_config: Dict[str, Any] = field(default_factory=dict)
+    group: Optional[str] = None
+    depends_on: DependsOn = field(default_factory=DependsOn)
+    created_at: float = field(default_factory=lambda: time.time())
+    refs: List[RefArgs] = field(default_factory=list)
+
+    @property
+    def depends_on_nodes(self):
+        return self.depends_on.nodes
+
+    def same_metrics(self, old: "SavedQuery") -> bool:
+        return self.metrics == old.metrics
+
+    def same_group_bys(self, old: "SavedQuery") -> bool:
+        return self.group_bys == old.group_bys
+
+    def same_description(self, old: "SavedQuery") -> bool:
+        return self.description == old.description
+
+    def same_where(self, old: "SavedQuery") -> bool:
+        return self.where == old.where
+
+    def same_label(self, old: "SavedQuery") -> bool:
+        return self.label == old.label
+
+    def same_config(self, old: "SavedQuery") -> bool:
+        return self.config == old.config
+
+    def same_group(self, old: "SavedQuery") -> bool:
+        return self.group == old.group
+
+    def same_contents(self, old: Optional["SavedQuery"]) -> bool:
+        # existing when it didn't before is a change!
+        # metadata/tags changes are not "changes"
+        if old is None:
+            return True
+
+        return (
+            self.same_metrics(old)
+            and self.same_group_bys(old)
+            and self.same_description(old)
+            and self.same_where(old)
+            and self.same_label(old)
+            and self.same_config(old)
+            and self.same_group(old)
+            and True
+        )
+
+
+# ====================================
 # Patches
 # ====================================
 
@@ -1794,6 +1867,7 @@ GraphMemberNode = Union[
     ResultNode,
     Exposure,
     Metric,
+    SavedQuery,
     SemanticModel,
 ]
 
