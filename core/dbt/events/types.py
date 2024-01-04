@@ -388,6 +388,19 @@ class ConfigTargetPathDeprecation(WarnLevel):
         return line_wrap_message(warning_tag(f"Deprecated functionality\n\n{description}"))
 
 
+class ProjectFlagsMovedDeprecation(WarnLevel):
+    def code(self) -> str:
+        return "D013"
+
+    def message(self) -> str:
+        description = (
+            "User config should be moved from the 'config' key in profiles.yml to the 'flags' "
+            "key in dbt_project.yml."
+        )
+        # Can't use line_wrap_message here because flags.printer_width isn't available yet
+        return warning_tag(f"Deprecated functionality\n\n{description}")
+
+
 # =======================================================
 # I - Project parsing
 # =======================================================
