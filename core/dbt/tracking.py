@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
-import logbook
 import pytz
 import requests
 from snowplow_tracker import Emitter, SelfDescribingJson, Subject, Tracker
@@ -14,7 +13,7 @@ from snowplow_tracker import logger as sp_logger
 
 from dbt import version as dbt_version
 from dbt.clients.yaml_helper import safe_load, yaml  # noqa:F401
-from dbt.common.events.functions import fire_event, get_invocation_id
+from dbt_common.events.functions import fire_event, get_invocation_id
 from dbt.events.types import (
     DisableTracking,
     FlushEvents,
@@ -25,7 +24,7 @@ from dbt.events.types import (
     TrackingInitializeFailure,
 )
 from dbt.adapters.exceptions import FailedToConnectError
-from dbt.common.exceptions import NotImplementedError
+from dbt_common.exceptions import NotImplementedError
 
 sp_logger.setLevel(100)
 
@@ -455,20 +454,6 @@ def disable_tracking():
 def do_not_track():
     global active_user
     active_user = User(None)
-
-
-class InvocationProcessor(logbook.Processor):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def process(self, record):
-        if active_user is not None:
-            record.extra.update(
-                {
-                    "run_started_at": active_user.run_started_at.isoformat(),
-                    "invocation_id": get_invocation_id(),
-                }
-            )
 
 
 def initialize_from_flags(send_anonymous_usage_stats, profiles_dir):

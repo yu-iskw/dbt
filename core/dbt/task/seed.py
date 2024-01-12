@@ -6,12 +6,11 @@ from .printer import (
 )
 
 from dbt.artifacts.results import RunStatus, NodeStatus
-from dbt.common.exceptions import DbtInternalError
+from dbt_common.exceptions import DbtInternalError
 from dbt.graph import ResourceTypeSelector
-from dbt.logger import TextOnly
-from dbt.common.events.functions import fire_event
-from dbt.common.events.types import Formatting
-from dbt.common.events.base_types import EventLevel
+from dbt_common.events.functions import fire_event
+from dbt_common.events.types import Formatting
+from dbt_common.events.base_types import EventLevel
 from dbt.events.types import (
     SeedHeader,
     LogSeedResult,
@@ -96,14 +95,12 @@ class SeedTask(RunTask):
         alias = result.node.alias
 
         header = "Random sample of table: {}.{}".format(schema, alias)
-        with TextOnly():
-            fire_event(Formatting(""))
+        fire_event(Formatting(""))
         fire_event(SeedHeader(header=header))
         fire_event(Formatting("-" * len(header)))
 
         rand_table.print_table(max_rows=10, max_columns=None)
-        with TextOnly():
-            fire_event(Formatting(""))
+        fire_event(Formatting(""))
 
     def show_tables(self, results):
         for result in results:
