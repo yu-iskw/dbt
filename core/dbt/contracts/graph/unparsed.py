@@ -105,6 +105,7 @@ TestDef = Union[Dict[str, Any], str]
 
 @dataclass
 class HasColumnAndTestProps(HasColumnProps):
+    data_tests: List[TestDef] = field(default_factory=list)
     tests: List[TestDef] = field(default_factory=list)
 
 
@@ -152,7 +153,7 @@ class UnparsedVersion(dbtClassMixin):
     config: Dict[str, Any] = field(default_factory=dict)
     constraints: List[Dict[str, Any]] = field(default_factory=list)
     docs: Docs = field(default_factory=Docs)
-    tests: Optional[List[TestDef]] = None
+    data_tests: Optional[List[TestDef]] = None
     columns: Sequence[Union[dbt_common.helper_types.IncludeExclude, UnparsedColumn]] = field(
         default_factory=list
     )
@@ -255,7 +256,11 @@ class UnparsedModelUpdate(UnparsedNodeUpdate):
                 f"get_tests_for_version called for version '{version}' not in version map"
             )
         unparsed_version = self._version_map[version]
-        return unparsed_version.tests if unparsed_version.tests is not None else self.tests
+        return (
+            unparsed_version.data_tests
+            if unparsed_version.data_tests is not None
+            else self.data_tests
+        )
 
 
 @dataclass
@@ -403,7 +408,7 @@ class SourceTablePatch(dbtClassMixin):
     freshness: Optional[FreshnessThreshold] = field(default_factory=FreshnessThreshold)
     external: Optional[ExternalTable] = None
     tags: Optional[List[str]] = None
-    tests: Optional[List[TestDef]] = None
+    data_tests: Optional[List[TestDef]] = None
     columns: Optional[Sequence[UnparsedColumn]] = None
 
     def to_patch_dict(self) -> Dict[str, Any]:
@@ -783,3 +788,41 @@ def normalize_date(d: Optional[datetime.date]) -> Optional[datetime.datetime]:
         dt = dt.astimezone()
 
     return dt
+
+
+class UnitTestFormat(StrEnum):
+    CSV = "csv"
+    Dict = "dict"
+
+
+@dataclass
+class UnitTestInputFixture(dbtClassMixin):
+    input: str
+    rows: Optional[Union[str, List[Dict[str, Any]]]] = None
+    format: UnitTestFormat = UnitTestFormat.Dict
+    fixture: Optional[str] = None
+
+
+@dataclass
+class UnitTestOutputFixture(dbtClassMixin):
+    rows: Optional[Union[str, List[Dict[str, Any]]]] = None
+    format: UnitTestFormat = UnitTestFormat.Dict
+    fixture: Optional[str] = None
+
+
+@dataclass
+class UnitTestOverrides(dbtClassMixin):
+    macros: Dict[str, Any] = field(default_factory=dict)
+    vars: Dict[str, Any] = field(default_factory=dict)
+    env_vars: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UnparsedUnitTest(dbtClassMixin):
+    name: str
+    model: str  # name of the model being unit tested
+    given: Sequence[UnitTestInputFixture]
+    expect: UnitTestOutputFixture
+    description: str = ""
+    overrides: Optional[UnitTestOverrides] = None
+    config: Dict[str, Any] = field(default_factory=dict)

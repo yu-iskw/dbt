@@ -35,6 +35,8 @@ class NodeType(StrEnum):
     Group = "group"
     SavedQuery = "saved_query"
     SemanticModel = "semantic_model"
+    Unit = "unit_test"
+    Fixture = "fixture"
 
     @classmethod
     def executable(cls) -> List["NodeType"]:

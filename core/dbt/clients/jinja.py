@@ -84,6 +84,26 @@ class MacroGenerator(CallableMacroGenerator):
             return self.call_macro(*args, **kwargs)
 
 
+class UnitTestMacroGenerator(MacroGenerator):
+    # this makes UnitTestMacroGenerator objects callable like functions
+    def __init__(
+        self,
+        macro_generator: MacroGenerator,
+        call_return_value: Any,
+    ) -> None:
+        super().__init__(
+            macro_generator.macro,
+            macro_generator.context,
+            macro_generator.node,
+            macro_generator.stack,
+        )
+        self.call_return_value = call_return_value
+
+    def __call__(self, *args, **kwargs):
+        with self.track_call():
+            return self.call_return_value
+
+
 # performance note: Local benmcharking (so take it with a big grain of salt!)
 # on this indicates that it is is on average slightly slower than
 # checking two separate patterns, but the standard deviation is smaller with

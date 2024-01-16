@@ -152,6 +152,7 @@ sample_values = [
     core_types.ConfigLogPathDeprecation(deprecated_path=""),
     core_types.ConfigTargetPathDeprecation(deprecated_path=""),
     adapter_types.CollectFreshnessReturnSignature(),
+    core_types.TestsConfigDeprecation(deprecated_path="", exp_path=""),
     core_types.ProjectFlagsMovedDeprecation(),
     # E - DB Adapter ======================
     adapter_types.AdapterEventDebug(),

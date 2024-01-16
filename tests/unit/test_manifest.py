@@ -399,6 +399,7 @@ class ManifestTest(unittest.TestCase):
                 "docs": {},
                 "disabled": {},
                 "semantic_models": {},
+                "unit_tests": {},
                 "saved_queries": {},
             },
         )
@@ -583,6 +584,7 @@ class ManifestTest(unittest.TestCase):
                 },
                 "disabled": {},
                 "semantic_models": {},
+                "unit_tests": {},
                 "saved_queries": {},
             },
         )
@@ -922,6 +924,7 @@ class MixedManifestTest(unittest.TestCase):
                 "docs": {},
                 "disabled": {},
                 "semantic_models": {},
+                "unit_tests": {},
                 "saved_queries": {},
             },
         )

@@ -388,6 +388,18 @@ class ConfigTargetPathDeprecation(WarnLevel):
         return line_wrap_message(warning_tag(f"Deprecated functionality\n\n{description}"))
 
 
+class TestsConfigDeprecation(WarnLevel):
+    def code(self) -> str:
+        return "D012"
+
+    def message(self) -> str:
+        description = (
+            f"The `{self.deprecated_path}` config has been renamed to `{self.exp_path}`. "
+            "Please update your `dbt_project.yml` configuration to reflect this change."
+        )
+        return line_wrap_message(warning_tag(f"Deprecated functionality\n\n{description}"))
+
+
 class ProjectFlagsMovedDeprecation(WarnLevel):
     def code(self) -> str:
         return "D013"

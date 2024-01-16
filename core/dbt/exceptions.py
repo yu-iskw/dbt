@@ -712,6 +712,12 @@ class InvalidAccessTypeError(ParsingError):
         super().__init__(msg=msg)
 
 
+class InvalidUnitTestGivenInput(ParsingError):
+    def __init__(self, input: str) -> None:
+        msg = f"Unit test given inputs must be either a 'ref', 'source' or 'this' call. Got: '{input}'."
+        super().__init__(msg=msg)
+
+
 class SameKeyNestedError(CompilationError):
     def __init__(self) -> None:
         msg = "Test cannot have the same key at the top-level and in config"

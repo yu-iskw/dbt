@@ -126,15 +126,28 @@ models:
   - name: model_0
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - unique
           - not_null
   - name: model_2
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - unique
           - not_null
+"""
+
+unit_tests__yml = """
+unit_tests:
+  - name: ut_model_3
+    model: model_3
+    given:
+      - input: ref('model_1')
+        rows:
+          - {iso3: ABW, name: Aruba}
+    expect:
+      rows:
+        - {iso3: ABW, name: Aruba}
 """
 
 models_failing_tests__tests_yml = """
@@ -144,16 +157,16 @@ models:
   - name: model_0
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: historical_iso_numeric
-        tests:
+        data_tests:
           - not_null
   - name: model_2
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - unique
           - not_null
 """
@@ -172,7 +185,7 @@ models:
   - name: model_0
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - relationships:
               to: ref('model_1')
               field: iso3
@@ -180,7 +193,7 @@ models:
   - name: model_1
     columns:
       - name: iso3
-        tests:
+        data_tests:
           - relationships:
               to: ref('model_0')
               field: iso3
@@ -202,7 +215,7 @@ models:
   - name: model_a
     columns:
       - name: id
-        tests:
+        data_tests:
           - not_null
 """
 
@@ -213,17 +226,17 @@ models:
   - name: model_a
     columns:
       - name: id
-        tests:
+        data_tests:
           - not_null
   - name: model_b
     columns:
       - name: id
-        tests:
+        data_tests:
           - not_null
   - name: model_c
     columns:
       - name: id
-        tests:
+        data_tests:
           - not_null
 """
 
@@ -251,7 +264,7 @@ models:
   - name: model_a
     columns:
       - name: id
-        tests:
+        data_tests:
           - unique
           - not_null
           - relationships:
@@ -264,7 +277,7 @@ models:
   - name: model_b
     columns:
       - name: id
-        tests:
+        data_tests:
           - unique
           - not_null
           - relationships:
@@ -277,7 +290,7 @@ models:
   - name: model_c
     columns:
       - name: id
-        tests:
+        data_tests:
           - unique
           - not_null
           - relationships:
