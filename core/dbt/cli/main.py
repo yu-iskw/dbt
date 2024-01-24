@@ -602,13 +602,12 @@ def run(ctx, **kwargs):
 @requires.profile
 @requires.project
 @requires.runtime_config
-@requires.manifest
 def retry(ctx, **kwargs):
     """Retry the nodes that failed in the previous run."""
+    # Retry will parse manifest inside the task after we consolidate the flags
     task = RetryTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
-        ctx.obj["manifest"],
     )
 
     results = task.run()
