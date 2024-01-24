@@ -60,7 +60,13 @@ from dbt.events.types import (
 )
 from dbt_common.events.contextvars import set_log_contextvars
 from dbt.flags import get_flags
-from dbt.node_types import ModelLanguage, NodeType, AccessType
+from dbt.node_types import (
+    ModelLanguage,
+    NodeType,
+    AccessType,
+    REFABLE_NODE_TYPES,
+    VERSIONED_NODE_TYPES,
+)
 from dbt_semantic_interfaces.references import (
     EntityReference,
     MeasureReference,
@@ -91,6 +97,8 @@ from .model_config import (
     SavedQueryConfig,
 )
 
+from dbt.artifacts.resources import BaseArtifactNode, Documentation as DocumentationContract
+
 
 # =====================================================================
 # This contains the classes for all of the nodes and node-like objects
@@ -116,15 +124,8 @@ from .model_config import (
 
 
 @dataclass
-class BaseNode(dbtClassMixin, Replaceable):
+class BaseNode(BaseArtifactNode):
     """All nodes or node-like objects in this file should have this as a base class"""
-
-    name: str
-    resource_type: NodeType
-    package_name: str
-    path: str
-    original_file_path: str
-    unique_id: str
 
     @property
     def search_name(self):
@@ -136,7 +137,7 @@ class BaseNode(dbtClassMixin, Replaceable):
 
     @property
     def is_refable(self):
-        return self.resource_type in NodeType.refable()
+        return self.resource_type in REFABLE_NODE_TYPES
 
     @property
     def should_store_failures(self):
@@ -145,11 +146,11 @@ class BaseNode(dbtClassMixin, Replaceable):
     # will this node map to an object in the database?
     @property
     def is_relational(self):
-        return self.resource_type in NodeType.refable()
+        return self.resource_type in REFABLE_NODE_TYPES
 
     @property
     def is_versioned(self):
-        return self.resource_type in NodeType.versioned() and self.version is not None
+        return self.resource_type in VERSIONED_NODE_TYPES and self.version is not None
 
     @property
     def is_ephemeral(self):
@@ -1178,10 +1179,7 @@ class Macro(BaseNode):
 
 
 @dataclass
-class Documentation(BaseNode):
-    block_contents: str
-    resource_type: Literal[NodeType.Documentation]
-
+class Documentation(DocumentationContract, BaseNode):
     @property
     def search_name(self):
         return self.name
