@@ -804,6 +804,12 @@ class UnitTestOverrides(dbtClassMixin):
 
 
 @dataclass
+class UnitTestNodeVersions(dbtClassMixin):
+    include: Optional[List[NodeVersion]] = None
+    exclude: Optional[List[NodeVersion]] = None
+
+
+@dataclass
 class UnparsedUnitTest(dbtClassMixin):
     name: str
     model: str  # name of the model being unit tested
@@ -812,3 +818,11 @@ class UnparsedUnitTest(dbtClassMixin):
     description: str = ""
     overrides: Optional[UnitTestOverrides] = None
     config: Dict[str, Any] = field(default_factory=dict)
+    versions: Optional[UnitTestNodeVersions] = None
+
+    @classmethod
+    def validate(cls, data):
+        super(UnparsedUnitTest, cls).validate(data)
+        if data.get("versions", None):
+            if data["versions"].get("include") and data["versions"].get("exclude"):
+                raise ValidationError("Unit tests can not both include and exclude versions.")

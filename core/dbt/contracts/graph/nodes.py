@@ -42,6 +42,7 @@ from dbt.contracts.graph.unparsed import (
     UnitTestOverrides,
     UnitTestInputFixture,
     UnitTestOutputFixture,
+    UnitTestNodeVersions,
 )
 from dbt.contracts.graph.node_args import ModelNodeArgs
 from dbt.contracts.graph.semantic_layer_common import WhereFilterIntersection
@@ -1067,6 +1068,9 @@ class UnitTestDefinition(NodeInfoMixin, GraphNode, UnitTestDefinitionMandatory):
     config: UnitTestConfig = field(default_factory=UnitTestConfig)
     checksum: Optional[str] = None
     schema: Optional[str] = None
+    created_at: float = field(default_factory=lambda: time.time())
+    versions: Optional[UnitTestNodeVersions] = None
+    version: Optional[NodeVersion] = None
 
     @property
     def build_path(self):
@@ -1089,7 +1093,7 @@ class UnitTestDefinition(NodeInfoMixin, GraphNode, UnitTestDefinitionMandatory):
 
     def build_unit_test_checksum(self):
         # everything except 'description'
-        data = f"{self.model}-{self.given}-{self.expect}-{self.overrides}"
+        data = f"{self.model}-{self.versions}-{self.given}-{self.expect}-{self.overrides}"
 
         # include underlying fixture data
         for input in self.given:
