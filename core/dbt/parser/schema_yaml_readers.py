@@ -23,17 +23,18 @@ from dbt.contracts.graph.nodes import (
     Exposure,
     Group,
     Metric,
+    SemanticModel,
+    SavedQuery,
+)
+from dbt.artifacts.resources import (
+    ConversionTypeParams,
+    Export,
+    ExportConfig,
+    MetricConfig,
     MetricInput,
     MetricInputMeasure,
     MetricTimeWindow,
     MetricTypeParams,
-    SemanticModel,
-    SavedQuery,
-    ConversionTypeParams,
-)
-from dbt.artifacts.resources import (
-    Export,
-    ExportConfig,
     QueryParams,
     SavedQueryConfig,
     WhereFilter,
@@ -50,7 +51,7 @@ from dbt_common.exceptions import DbtInternalError
 from dbt.exceptions import YamlParseDictError, JSONValidationError
 from dbt.context.providers import generate_parse_exposure, generate_parse_semantic_models
 
-from dbt.contracts.graph.model_config import MetricConfig, ExposureConfig
+from dbt.contracts.graph.model_config import ExposureConfig
 from dbt.context.context_config import (
     BaseContextConfigGenerator,
     ContextConfigGenerator,

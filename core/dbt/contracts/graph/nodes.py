@@ -24,7 +24,6 @@ from dbt.contracts.graph.semantic_models import (
     Measure,
 )
 from dbt.contracts.graph.unparsed import (
-    ConstantPropertyInput,
     ExposureType,
     ExternalTable,
     FreshnessThreshold,
@@ -68,12 +67,6 @@ from dbt_semantic_interfaces.references import (
     SemanticModelReference,
     TimeDimensionReference,
 )
-from dbt_semantic_interfaces.references import MetricReference as DSIMetricReference
-from dbt_semantic_interfaces.type_enums import (
-    ConversionCalculationType,
-    MetricType,
-    TimeGranularity,
-)
 
 from .model_config import (
     NodeConfig,
@@ -81,7 +74,6 @@ from .model_config import (
     SeedConfig,
     TestConfig,
     SourceConfig,
-    MetricConfig,
     ExposureConfig,
     EmptySnapshotConfig,
     SnapshotConfig,
@@ -98,13 +90,13 @@ from dbt.artifacts.resources import (
     MacroArgument,
     Documentation as DocumentationResource,
     Macro as MacroResource,
+    Metric as MetricResource,
     NodeVersion,
     Group as GroupResource,
     GraphResource,
     RefArgs as RefArgsResource,
     SavedQuery as SavedQueryResource,
     SourceFileMetadata as SourceFileMetadataResource,
-    WhereFilterIntersection as WhereFilterIntersectionResource,
 )
 
 
@@ -1464,91 +1456,7 @@ class Exposure(GraphNode):
 
 
 @dataclass
-class MetricInputMeasure(dbtClassMixin):
-    name: str
-    filter: Optional[WhereFilterIntersectionResource] = None
-    alias: Optional[str] = None
-    join_to_timespine: bool = False
-    fill_nulls_with: Optional[int] = None
-
-    def measure_reference(self) -> MeasureReference:
-        return MeasureReference(element_name=self.name)
-
-    def post_aggregation_measure_reference(self) -> MeasureReference:
-        return MeasureReference(element_name=self.alias or self.name)
-
-
-@dataclass
-class MetricTimeWindow(dbtClassMixin):
-    count: int
-    granularity: TimeGranularity
-
-
-@dataclass
-class MetricInput(dbtClassMixin):
-    name: str
-    filter: Optional[WhereFilterIntersectionResource] = None
-    alias: Optional[str] = None
-    offset_window: Optional[MetricTimeWindow] = None
-    offset_to_grain: Optional[TimeGranularity] = None
-
-    def as_reference(self) -> DSIMetricReference:
-        return DSIMetricReference(element_name=self.name)
-
-    def post_aggregation_reference(self) -> DSIMetricReference:
-        return DSIMetricReference(element_name=self.alias or self.name)
-
-
-@dataclass
-class ConversionTypeParams(dbtClassMixin):
-    base_measure: MetricInputMeasure
-    conversion_measure: MetricInputMeasure
-    entity: str
-    calculation: ConversionCalculationType = ConversionCalculationType.CONVERSION_RATE
-    window: Optional[MetricTimeWindow] = None
-    constant_properties: Optional[List[ConstantPropertyInput]] = None
-
-
-@dataclass
-class MetricTypeParams(dbtClassMixin):
-    measure: Optional[MetricInputMeasure] = None
-    input_measures: List[MetricInputMeasure] = field(default_factory=list)
-    numerator: Optional[MetricInput] = None
-    denominator: Optional[MetricInput] = None
-    expr: Optional[str] = None
-    window: Optional[MetricTimeWindow] = None
-    grain_to_date: Optional[TimeGranularity] = None
-    metrics: Optional[List[MetricInput]] = None
-    conversion_type_params: Optional[ConversionTypeParams] = None
-
-
-@dataclass
-class MetricReference(dbtClassMixin, Replaceable):
-    sql: Optional[Union[str, int]] = None
-    unique_id: Optional[str] = None
-
-
-@dataclass
-class Metric(GraphNode):
-    name: str
-    description: str
-    label: str
-    type: MetricType
-    type_params: MetricTypeParams
-    filter: Optional[WhereFilterIntersectionResource] = None
-    metadata: Optional[SourceFileMetadataResource] = None
-    resource_type: Literal[NodeType.Metric]
-    meta: Dict[str, Any] = field(default_factory=dict)
-    tags: List[str] = field(default_factory=list)
-    config: MetricConfig = field(default_factory=MetricConfig)
-    unrendered_config: Dict[str, Any] = field(default_factory=dict)
-    sources: List[List[str]] = field(default_factory=list)
-    depends_on: DependsOn = field(default_factory=DependsOn)
-    refs: List[RefArgsResource] = field(default_factory=list)
-    metrics: List[List[str]] = field(default_factory=list)
-    created_at: float = field(default_factory=lambda: time.time())
-    group: Optional[str] = None
-
+class Metric(GraphNode, MetricResource):
     @property
     def depends_on_nodes(self):
         return self.depends_on.nodes
@@ -1556,18 +1464,6 @@ class Metric(GraphNode):
     @property
     def search_name(self):
         return self.name
-
-    @property
-    def input_measures(self) -> List[MetricInputMeasure]:
-        return self.type_params.input_measures
-
-    @property
-    def measure_references(self) -> List[MeasureReference]:
-        return [x.measure_reference() for x in self.input_measures]
-
-    @property
-    def input_metrics(self) -> List[MetricInput]:
-        return self.type_params.metrics or []
 
     def same_description(self, old: "Metric") -> bool:
         return self.description == old.description
