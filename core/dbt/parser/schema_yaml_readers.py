@@ -19,7 +19,6 @@ from dbt.contracts.graph.unparsed import (
     UnparsedSemanticModel,
     UnparsedConversionTypeParams,
 )
-from dbt.contracts.graph.model_config import SavedQueryConfig
 from dbt.contracts.graph.nodes import (
     Exposure,
     Group,
@@ -32,8 +31,14 @@ from dbt.contracts.graph.nodes import (
     SavedQuery,
     ConversionTypeParams,
 )
-from dbt.contracts.graph.saved_queries import Export, ExportConfig, QueryParams
-from dbt.contracts.graph.semantic_layer_common import WhereFilter, WhereFilterIntersection
+from dbt.artifacts.resources import (
+    Export,
+    ExportConfig,
+    QueryParams,
+    SavedQueryConfig,
+    WhereFilter,
+    WhereFilterIntersection,
+)
 from dbt.contracts.graph.semantic_models import (
     Dimension,
     DimensionTypeParams,

@@ -17,13 +17,11 @@ from dbt_common.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
 
 from dbt_common.clients.system import write_file
 from dbt.contracts.files import FileHash
-from dbt.contracts.graph.saved_queries import Export, QueryParams
 from dbt.contracts.graph.semantic_models import (
     Defaults,
     Dimension,
     Entity,
     Measure,
-    SourceFileMetadata,
 )
 from dbt.contracts.graph.unparsed import (
     ConstantPropertyInput,
@@ -35,7 +33,6 @@ from dbt.contracts.graph.unparsed import (
     Owner,
     Quoting,
     TestDef,
-    NodeVersion,
     UnparsedSourceDefinition,
     UnparsedSourceTableDefinition,
     UnparsedColumn,
@@ -45,7 +42,6 @@ from dbt.contracts.graph.unparsed import (
     UnitTestNodeVersions,
 )
 from dbt.contracts.graph.node_args import ModelNodeArgs
-from dbt.contracts.graph.semantic_layer_common import WhereFilterIntersection
 from dbt.contracts.util import Replaceable
 from dbt_common.contracts.config.properties import AdditionalPropertiesMixin
 from dbt_common.events.functions import warn_or_error
@@ -92,17 +88,23 @@ from .model_config import (
     SemanticModelConfig,
     UnitTestConfig,
     UnitTestNodeConfig,
-    SavedQueryConfig,
 )
 
 from dbt.artifacts.resources import (
     BaseResource,
+    DependsOn,
     Docs,
     MacroDependsOn,
     MacroArgument,
     Documentation as DocumentationResource,
     Macro as MacroResource,
+    NodeVersion,
     Group as GroupResource,
+    GraphResource,
+    RefArgs as RefArgsResource,
+    SavedQuery as SavedQueryResource,
+    SourceFileMetadata as SourceFileMetadataResource,
+    WhereFilterIntersection as WhereFilterIntersectionResource,
 )
 
 
@@ -171,34 +173,11 @@ class BaseNode(BaseResource):
 
 
 @dataclass
-class GraphNode(BaseNode):
+class GraphNode(GraphResource, BaseNode):
     """Nodes in the DAG. Macro and Documentation don't have fqn."""
-
-    fqn: List[str]
 
     def same_fqn(self, other) -> bool:
         return self.fqn == other.fqn
-
-
-@dataclass
-class RefArgs(dbtClassMixin):
-    name: str
-    package: Optional[str] = None
-    version: Optional[NodeVersion] = None
-
-    @property
-    def positional_args(self) -> List[str]:
-        if self.package:
-            return [self.package, self.name]
-        else:
-            return [self.name]
-
-    @property
-    def keyword_args(self) -> Dict[str, Optional[NodeVersion]]:
-        if self.version:
-            return {"version": self.version}
-        else:
-            return {}
 
 
 @dataclass
@@ -254,15 +233,6 @@ class DeferRelation(HasRelationMetadata):
     @property
     def identifier(self):
         return self.alias
-
-
-@dataclass
-class DependsOn(MacroDependsOn):
-    nodes: List[str] = field(default_factory=list)
-
-    def add_node(self, value: str):
-        if value not in self.nodes:
-            self.nodes.append(value)
 
 
 @dataclass
@@ -480,7 +450,7 @@ class CompiledNode(ParsedNode):
     so all ManifestNodes except SeedNode."""
 
     language: str = "sql"
-    refs: List[RefArgs] = field(default_factory=list)
+    refs: List[RefArgsResource] = field(default_factory=list)
     sources: List[List[str]] = field(default_factory=list)
     metrics: List[List[str]] = field(default_factory=list)
     depends_on: DependsOn = field(default_factory=DependsOn)
@@ -1424,7 +1394,7 @@ class Exposure(GraphNode):
     unrendered_config: Dict[str, Any] = field(default_factory=dict)
     url: Optional[str] = None
     depends_on: DependsOn = field(default_factory=DependsOn)
-    refs: List[RefArgs] = field(default_factory=list)
+    refs: List[RefArgsResource] = field(default_factory=list)
     sources: List[List[str]] = field(default_factory=list)
     metrics: List[List[str]] = field(default_factory=list)
     created_at: float = field(default_factory=lambda: time.time())
@@ -1496,7 +1466,7 @@ class Exposure(GraphNode):
 @dataclass
 class MetricInputMeasure(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilterIntersection] = None
+    filter: Optional[WhereFilterIntersectionResource] = None
     alias: Optional[str] = None
     join_to_timespine: bool = False
     fill_nulls_with: Optional[int] = None
@@ -1517,7 +1487,7 @@ class MetricTimeWindow(dbtClassMixin):
 @dataclass
 class MetricInput(dbtClassMixin):
     name: str
-    filter: Optional[WhereFilterIntersection] = None
+    filter: Optional[WhereFilterIntersectionResource] = None
     alias: Optional[str] = None
     offset_window: Optional[MetricTimeWindow] = None
     offset_to_grain: Optional[TimeGranularity] = None
@@ -1565,8 +1535,8 @@ class Metric(GraphNode):
     label: str
     type: MetricType
     type_params: MetricTypeParams
-    filter: Optional[WhereFilterIntersection] = None
-    metadata: Optional[SourceFileMetadata] = None
+    filter: Optional[WhereFilterIntersectionResource] = None
+    metadata: Optional[SourceFileMetadataResource] = None
     resource_type: Literal[NodeType.Metric]
     meta: Dict[str, Any] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
@@ -1574,7 +1544,7 @@ class Metric(GraphNode):
     unrendered_config: Dict[str, Any] = field(default_factory=dict)
     sources: List[List[str]] = field(default_factory=list)
     depends_on: DependsOn = field(default_factory=DependsOn)
-    refs: List[RefArgs] = field(default_factory=list)
+    refs: List[RefArgsResource] = field(default_factory=list)
     metrics: List[List[str]] = field(default_factory=list)
     created_at: float = field(default_factory=lambda: time.time())
     group: Optional[str] = None
@@ -1674,9 +1644,9 @@ class SemanticModel(GraphNode):
     entities: Sequence[Entity] = field(default_factory=list)
     measures: Sequence[Measure] = field(default_factory=list)
     dimensions: Sequence[Dimension] = field(default_factory=list)
-    metadata: Optional[SourceFileMetadata] = None
+    metadata: Optional[SourceFileMetadataResource] = None
     depends_on: DependsOn = field(default_factory=DependsOn)
-    refs: List[RefArgs] = field(default_factory=list)
+    refs: List[RefArgsResource] = field(default_factory=list)
     created_at: float = field(default_factory=lambda: time.time())
     config: SemanticModelConfig = field(default_factory=SemanticModelConfig)
     unrendered_config: Dict[str, Any] = field(default_factory=dict)
@@ -1824,36 +1794,12 @@ class SemanticModel(GraphNode):
 
 
 # ====================================
-# SavedQuery and related classes
+# SavedQuery
 # ====================================
 
 
 @dataclass
-class SavedQueryMandatory(GraphNode):
-    query_params: QueryParams
-    exports: List[Export]
-
-
-@dataclass
-class SavedQuery(NodeInfoMixin, SavedQueryMandatory):
-    description: Optional[str] = None
-    label: Optional[str] = None
-    metadata: Optional[SourceFileMetadata] = None
-    config: SavedQueryConfig = field(default_factory=SavedQueryConfig)
-    unrendered_config: Dict[str, Any] = field(default_factory=dict)
-    group: Optional[str] = None
-    depends_on: DependsOn = field(default_factory=DependsOn)
-    created_at: float = field(default_factory=lambda: time.time())
-    refs: List[RefArgs] = field(default_factory=list)
-
-    @property
-    def metrics(self) -> List[str]:
-        return self.query_params.metrics
-
-    @property
-    def depends_on_nodes(self):
-        return self.depends_on.nodes
-
+class SavedQuery(NodeInfoMixin, GraphNode, SavedQueryResource):
     def same_metrics(self, old: "SavedQuery") -> bool:
         return self.query_params.metrics == old.query_params.metrics
 
@@ -1876,12 +1822,18 @@ class SavedQuery(NodeInfoMixin, SavedQueryMandatory):
         return self.group == old.group
 
     def same_exports(self, old: "SavedQuery") -> bool:
+        # TODO: This isn't currently used in `same_contents` (nor called anywhere else)
         if len(self.exports) != len(old.exports):
             return False
 
         # exports should be in the same order, so we zip them for easy iteration
         for (old_export, new_export) in zip(old.exports, self.exports):
-            if not new_export.same_contents(old_export):
+            if not (
+                old_export.name == new_export.name
+                and old_export.config.export_as == new_export.config.export_as
+                and old_export.config.schema_name == new_export.config.schema_name
+                and old_export.config.alias == new_export.config.alias
+            ):
                 return False
 
         return True
