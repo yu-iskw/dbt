@@ -7,9 +7,13 @@ from hypothesis.strategies import builds, lists
 from dbt.artifacts.resources import (
     Dimension,
     Entity,
+    ExposureConfig,
+    ExposureType,
+    MaturityType,
     Measure,
     MetricInputMeasure,
     MetricTypeParams,
+    Owner,
     RefArgs,
 )
 from dbt.node_types import NodeType, AccessType
@@ -21,7 +25,6 @@ from dbt.contracts.graph.model_config import (
     TestConfig,
     SnapshotConfig,
     SourceConfig,
-    ExposureConfig,
     EmptySnapshotConfig,
     Hook,
 )
@@ -41,14 +44,11 @@ from dbt.contracts.graph.nodes import (
     SourceDefinition,
     Documentation,
     HookNode,
-    Owner,
     TestMetadata,
     SemanticModel,
 )
 from dbt.contracts.graph.unparsed import (
-    ExposureType,
     FreshnessThreshold,
-    MaturityType,
     Quoting,
     Time,
     TimePeriod,

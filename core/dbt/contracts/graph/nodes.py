@@ -31,12 +31,9 @@ from dbt_common.dataclass_schema import dbtClassMixin, ExtensibleDbtClassMixin
 from dbt_common.clients.system import write_file
 from dbt.contracts.files import FileHash
 from dbt.contracts.graph.unparsed import (
-    ExposureType,
     ExternalTable,
     FreshnessThreshold,
     HasYamlMetadata,
-    MaturityType,
-    Owner,
     Quoting,
     TestDef,
     UnparsedSourceDefinition,
@@ -74,7 +71,6 @@ from .model_config import (
     SeedConfig,
     TestConfig,
     SourceConfig,
-    ExposureConfig,
     EmptySnapshotConfig,
     SnapshotConfig,
     UnitTestConfig,
@@ -85,6 +81,7 @@ from dbt.artifacts.resources import (
     BaseResource,
     DependsOn,
     Docs,
+    Exposure as ExposureResource,
     MacroDependsOn,
     MacroArgument,
     Documentation as DocumentationResource,
@@ -1378,24 +1375,7 @@ class SourceDefinition(NodeInfoMixin, ParsedSourceMandatory):
 
 
 @dataclass
-class Exposure(GraphNode[GraphResource]):
-    type: ExposureType
-    owner: Owner
-    resource_type: Literal[NodeType.Exposure]
-    description: str = ""
-    label: Optional[str] = None
-    maturity: Optional[MaturityType] = None
-    meta: Dict[str, Any] = field(default_factory=dict)
-    tags: List[str] = field(default_factory=list)
-    config: ExposureConfig = field(default_factory=ExposureConfig)
-    unrendered_config: Dict[str, Any] = field(default_factory=dict)
-    url: Optional[str] = None
-    depends_on: DependsOn = field(default_factory=DependsOn)
-    refs: List[RefArgsResource] = field(default_factory=list)
-    sources: List[List[str]] = field(default_factory=list)
-    metrics: List[List[str]] = field(default_factory=list)
-    created_at: float = field(default_factory=lambda: time.time())
-
+class Exposure(GraphNode[ExposureResource], ExposureResource):
     @property
     def depends_on_nodes(self):
         return self.depends_on.nodes
