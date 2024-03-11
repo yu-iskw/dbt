@@ -397,6 +397,7 @@ resource_type = click.option(
         [
             "metric",
             "semantic_model",
+            "saved_query",
             "source",
             "analysis",
             "model",
