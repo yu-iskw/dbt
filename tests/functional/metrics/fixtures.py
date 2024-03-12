@@ -783,3 +783,21 @@ metrics:
         - name: average_tenure
           filter: "{{ Dimension('id__loves_dbt') }} is true"
 """
+
+duplicate_measure_metric_yml = """
+metrics:
+  # Simple metrics
+  - name: people_with_tenure
+    description: "Count of people with tenure"
+    type: simple
+    label: People with tenure
+    type_params:
+      measure: people
+  - name: ratio_tenure_to_people
+    description: People to years of tenure
+    label: New customers to all customers
+    type: ratio
+    type_params:
+      numerator: people_with_tenure
+      denominator: number_of_people
+"""
