@@ -420,7 +420,6 @@ def find_tested_model_node(
 def process_models_for_unit_test(
     manifest: Manifest, current_project: str, unit_test_def: UnitTestDefinition, models_to_versions
 ):
-
     # If the unit tests doesn't have a depends_on.nodes[0] then we weren't able to resolve
     # the model, either because versions hadn't been processed yet, or it's not a valid model name
     if not unit_test_def.depends_on.nodes:
@@ -438,6 +437,31 @@ def process_models_for_unit_test(
     target_model_id = unit_test_def.depends_on.nodes[0]
     target_model = manifest.nodes[target_model_id]
     assert isinstance(target_model, ModelNode)
+
+    target_model_is_incremental = "macro.dbt.is_incremental" in target_model.depends_on.macros
+    unit_test_def_has_incremental_override = unit_test_def.overrides and isinstance(
+        unit_test_def.overrides.macros.get("is_incremental"), bool
+    )
+
+    if target_model_is_incremental and (not unit_test_def_has_incremental_override):
+        raise ParsingError(
+            f"Boolean override for 'is_incremental' must be provided for unit test '{unit_test_def.name}' in model '{target_model.name}'"
+        )
+
+    unit_test_def_incremental_override_true = (
+        unit_test_def.overrides and unit_test_def.overrides.macros.get("is_incremental")
+    )
+    unit_test_def_has_this_input = "this" in [i.input for i in unit_test_def.given]
+
+    if (
+        target_model_is_incremental
+        and unit_test_def_incremental_override_true
+        and (not unit_test_def_has_this_input)
+    ):
+        raise ParsingError(
+            f"Unit test '{unit_test_def.name}' for incremental model '{target_model.name}' must have a 'this' input"
+        )
+
     # unit_test_versions = unit_test_def.versions
     # We're setting up unit tests for versioned models, so if
     # the model isn't versioned, we don't need to do anything
