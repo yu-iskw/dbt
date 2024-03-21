@@ -127,12 +127,14 @@ def global_flags(func):
     @p.populate_cache
     @p.print
     @p.printer_width
+    @p.profile
     @p.quiet
     @p.record_timing_info
     @p.send_anonymous_usage_stats
     @p.single_threaded
     @p.state
     @p.static_parser
+    @p.target
     @p.use_colors
     @p.use_colors_file
     @p.use_experimental_parser
@@ -172,7 +174,6 @@ def cli(ctx, **kwargs):
 @p.export_saved_queries
 @p.full_refresh
 @p.deprecated_include_saved_query
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.resource_type
@@ -181,7 +182,6 @@ def cli(ctx, **kwargs):
 @p.selector
 @p.show
 @p.store_failures
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -211,10 +211,8 @@ def build(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.clean_project_files_only
-@p.profile
 @p.profiles_dir
 @p.project_dir
-@p.target
 @p.target_path
 @p.vars
 @requires.postflight
@@ -246,14 +244,12 @@ def docs(ctx, **kwargs):
 @global_flags
 @p.compile_docs
 @p.exclude
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
 @p.empty_catalog
 @p.static
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -284,10 +280,8 @@ def docs_generate(ctx, **kwargs):
 @global_flags
 @p.browser
 @p.port
-@p.profile
 @p.profiles_dir
 @p.project_dir
-@p.target
 @p.target_path
 @p.vars
 @requires.postflight
@@ -317,7 +311,6 @@ def docs_serve(ctx, **kwargs):
 @p.full_refresh
 @p.show_output_format
 @p.introspect
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.empty
@@ -325,7 +318,6 @@ def docs_serve(ctx, **kwargs):
 @p.selector
 @p.inline
 @p.compile_inject_ephemeral_ctes
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -360,13 +352,11 @@ def compile(ctx, **kwargs):
 @p.show_output_format
 @p.show_limit
 @p.introspect
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
 @p.inline
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -398,10 +388,8 @@ def show(ctx, **kwargs):
 @global_flags
 @p.debug_connection
 @p.config_dir
-@p.profile
 @p.profiles_dir_exists_false
 @p.project_dir
-@p.target
 @p.vars
 @requires.postflight
 @requires.preflight
@@ -423,10 +411,8 @@ def debug(ctx, **kwargs):
 @cli.command("deps")
 @click.pass_context
 @global_flags
-@p.profile
 @p.profiles_dir_exists_false
 @p.project_dir
-@p.target
 @p.vars
 @p.source
 @p.lock
@@ -468,11 +454,9 @@ def deps(ctx, **kwargs):
 @global_flags
 # for backwards compatibility, accept 'project_name' as an optional positional argument
 @click.argument("project_name", required=False)
-@p.profile
 @p.profiles_dir_exists_false
 @p.project_dir
 @p.skip_profile_setup
-@p.target
 @p.vars
 @requires.postflight
 @requires.preflight
@@ -495,14 +479,12 @@ def init(ctx, **kwargs):
 @p.models
 @p.output
 @p.output_keys
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.resource_type
 @p.exclude_resource_type
 @p.raw_select
 @p.selector
-@p.target
 @p.target_path
 @p.vars
 @requires.postflight
@@ -536,10 +518,8 @@ cli.add_command(ls, "ls")
 @cli.command("parse")
 @click.pass_context
 @global_flags
-@p.profile
 @p.profiles_dir
 @p.project_dir
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -561,13 +541,11 @@ def parse(ctx, **kwargs):
 @global_flags
 @p.exclude
 @p.full_refresh
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.empty
 @p.select
 @p.selector
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -599,8 +577,6 @@ def run(ctx, **kwargs):
 @p.project_dir
 @p.profiles_dir
 @p.vars
-@p.profile
-@p.target
 @p.target_path
 @p.threads
 @p.full_refresh
@@ -630,14 +606,12 @@ def retry(ctx, **kwargs):
 @global_flags
 @p.exclude
 @p.full_refresh
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.resource_type
 @p.exclude_resource_type
 @p.select
 @p.selector
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -668,10 +642,8 @@ def clone(ctx, **kwargs):
 @global_flags
 @click.argument("macro")
 @p.args
-@p.profile
 @p.profiles_dir
 @p.project_dir
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -702,13 +674,11 @@ def run_operation(ctx, **kwargs):
 @global_flags
 @p.exclude
 @p.full_refresh
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
 @p.show
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -737,12 +707,10 @@ def seed(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.exclude
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -781,12 +749,10 @@ def source(ctx, **kwargs):
 @global_flags
 @p.exclude
 @p.output_path  # TODO: Is this ok to re-use?  We have three different output params, how much can we consolidate?
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
-@p.target
 @p.target_path
 @p.threads
 @p.vars
@@ -822,13 +788,11 @@ cli.commands["source"].add_command(snapshot_freshness, "snapshot-freshness")  # 
 @click.pass_context
 @global_flags
 @p.exclude
-@p.profile
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
 @p.store_failures
-@p.target
 @p.target_path
 @p.threads
 @p.vars
