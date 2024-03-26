@@ -54,7 +54,6 @@ class MethodName(StrEnum):
     Metric = "metric"
     Result = "result"
     SourceStatus = "source_status"
-    Wildcard = "wildcard"
     Version = "version"
     SemanticModel = "semantic_model"
     SavedQuery = "saved_query"
