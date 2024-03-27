@@ -111,7 +111,7 @@ def print_run_result_error(result, newline: bool = True, is_warning: bool = Fals
         else:
             fire_event(RunResultErrorNoMessage(status=result.status, node_info=node_info))
 
-        if result.node.build_path is not None:
+        if result.node.compiled_path is not None:
             with TextOnly():
                 fire_event(Formatting(""))
             fire_event(SQLCompiledPath(path=result.node.compiled_path, node_info=node_info))
