@@ -11,6 +11,11 @@ from dbt_common.events.format import (
 from dbt.events.base_types import WarnLevel, InfoLevel, DebugLevel, ErrorLevel, DynamicLevel
 
 
+# TODO Move this to dbt_common.ui
+def _error_tag(msg: str) -> str:
+    return f'[{red("ERROR")}]: {msg}'
+
+
 # Event codes have prefixes which follow this table
 #
 # | Code |     Description     |
@@ -411,6 +416,43 @@ class ProjectFlagsMovedDeprecation(WarnLevel):
         )
         # Can't use line_wrap_message here because flags.printer_width isn't available yet
         return warning_tag(f"Deprecated functionality\n\n{description}")
+
+
+class SpacesInModelNameDeprecation(DynamicLevel):
+    def code(self) -> str:
+        return "D014"
+
+    def message(self) -> str:
+        version = ".v" + self.model_version if self.model_version else ""
+        description = (
+            f"Model `{self.model_name}{version}` has spaces in its name. This is deprecated and "
+            "may cause errors when using dbt."
+        )
+
+        if self.level == EventLevel.ERROR.value:
+            description = _error_tag(description)
+        elif self.level == EventLevel.WARN.value:
+            description = warning_tag(description)
+
+        return line_wrap_message(description)
+
+
+class TotalModelNamesWithSpacesDeprecation(DynamicLevel):
+    def code(self) -> str:
+        return "D015"
+
+    def message(self) -> str:
+        description = f"Spaces in model names found in {self.count_invalid_names} model(s), which is deprecated."
+
+        if self.show_debug_hint:
+            description += " Run again with `--debug` to see them all."
+
+        if self.level == EventLevel.ERROR.value:
+            description = _error_tag(description)
+        elif self.level == EventLevel.WARN.value:
+            description = warning_tag(description)
+
+        return line_wrap_message(description)
 
 
 # =======================================================
