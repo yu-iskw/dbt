@@ -81,7 +81,6 @@ REQUIRED_PARSED_NODE_KEYS = frozenset(
         "compiled_path",
         "patch_path",
         "docs",
-        "deferred",
         "checksum",
         "unrendered_config",
         "created_at",
@@ -1041,16 +1040,15 @@ class MixedManifestTest(unittest.TestCase):
 
         original_manifest = Manifest(nodes=original_nodes)
         other_manifest = Manifest(nodes=other_nodes)
-        adapter = mock.MagicMock()
-        original_manifest.merge_from_artifact(adapter, other_manifest, {})
+        original_manifest.merge_from_artifact(other_manifest)
 
         # new node added should not be in original manifest
         assert "model.root.nested2" not in original_manifest.nodes
 
-        # old node removed should not have state relation in original manifest
+        # old node removed should not have defer_relation in original manifest
         assert original_manifest.nodes["model.root.nested"].defer_relation is None
 
-        # for all other nodes, check that state relation is updated
+        # for all other nodes, check that defer_relation is updated
         for k, v in original_manifest.nodes.items():
             if v.defer_relation:
                 self.assertEqual("other_" + v.database, v.defer_relation.database)

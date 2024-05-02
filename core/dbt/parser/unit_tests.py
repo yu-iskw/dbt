@@ -152,7 +152,10 @@ class UnitTestManifestLoader:
                 NodeType.Seed,
                 NodeType.Snapshot,
             ):
-                input_node = ModelNode(**common_fields)
+                input_node = ModelNode(
+                    **common_fields,
+                    defer_relation=original_input_node.defer_relation,
+                )
                 if (
                     original_input_node.resource_type == NodeType.Model
                     and original_input_node.version

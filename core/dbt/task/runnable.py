@@ -127,7 +127,7 @@ class GraphRunnableTask(ConfiguredTask):
     def get_node_selector(self) -> NodeSelector:
         raise NotImplementedError(f"get_node_selector not implemented for task {type(self)}")
 
-    def defer_to_manifest(self, adapter, selected_uids: AbstractSet[str]):
+    def defer_to_manifest(self):
         deferred_manifest = self._get_deferred_manifest()
         if deferred_manifest is None:
             return
@@ -135,16 +135,7 @@ class GraphRunnableTask(ConfiguredTask):
             raise DbtInternalError(
                 "Expected to defer to manifest, but there is no runtime manifest to defer from!"
             )
-        self.manifest.merge_from_artifact(
-            adapter=adapter,
-            other=deferred_manifest,
-            selected=selected_uids,
-            favor_state=bool(self.args.favor_state),
-        )
-        # We're rewriting the manifest because it's been mutated during merge_from_artifact.
-        # This is to reflect which nodes had been deferred to (= replaced with) their counterparts.
-        if self.args.write_json:
-            write_manifest(self.manifest, self.config.project_target_path)
+        self.manifest.merge_from_artifact(other=deferred_manifest)
 
     def get_graph_queue(self) -> GraphQueue:
         selector = self.get_node_selector()
@@ -479,8 +470,8 @@ class GraphRunnableTask(ConfiguredTask):
 
     def before_run(self, adapter, selected_uids: AbstractSet[str]):
         with adapter.connection_named("master"):
+            self.defer_to_manifest()
             self.populate_adapter_cache(adapter)
-            self.defer_to_manifest(adapter, selected_uids)
 
     def after_run(self, adapter, results):
         pass

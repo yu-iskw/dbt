@@ -1886,7 +1886,12 @@ def write_manifest(manifest: Manifest, target_path: str, which: Optional[str] = 
     write_semantic_manifest(manifest=manifest, target_path=target_path)
 
 
-def parse_manifest(runtime_config, write_perf_info, write, write_json):
+def parse_manifest(
+    runtime_config: RuntimeConfig,
+    write_perf_info: bool,
+    write: bool,
+    write_json: bool,
+) -> Manifest:
     register_adapter(runtime_config, get_mp_context())
     adapter = get_adapter(runtime_config)
     adapter.set_macro_context_generator(generate_runtime_macro_context)
@@ -1895,6 +1900,7 @@ def parse_manifest(runtime_config, write_perf_info, write, write_json):
         write_perf_info=write_perf_info,
     )
 
+    # If we should (over)write the manifest in the target path, do that now
     if write and write_json:
         write_manifest(manifest, runtime_config.project_target_path)
         pm = plugins.get_plugin_manager(runtime_config.project_name)
