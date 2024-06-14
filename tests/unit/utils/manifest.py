@@ -14,6 +14,8 @@ from dbt.artifacts.resources import (
     RefArgs,
     TestConfig,
     TestMetadata,
+    WhereFilter,
+    WhereFilterIntersection,
 )
 from dbt.artifacts.resources.v1.model import ModelConfig
 from dbt.contracts.files import AnySourceFile, FileHash
@@ -851,7 +853,11 @@ def saved_query() -> SavedQuery:
         query_params=QueryParams(
             metrics=["my_metric"],
             group_by=[],
-            where=None,
+            where=WhereFilterIntersection(
+                where_filters=[
+                    WhereFilter(where_sql_template="1=1"),
+                ]
+            ),
         ),
         exports=[],
         unique_id=f"saved_query.{pkg}.{name}",
@@ -973,13 +979,18 @@ def unit_tests(unit_test_table_model) -> List[UnitTestDefinition]:
 
 
 @pytest.fixture
-def metrics() -> List[Metric]:
-    return []
+def metrics(metric: Metric) -> List[Metric]:
+    return [metric]
 
 
 @pytest.fixture
-def semantic_models() -> List[SemanticModel]:
-    return []
+def semantic_models(semantic_model: SemanticModel) -> List[SemanticModel]:
+    return [semantic_model]
+
+
+@pytest.fixture
+def saved_queries(saved_query: SavedQuery) -> List[SavedQuery]:
+    return [saved_query]
 
 
 @pytest.fixture
@@ -996,6 +1007,7 @@ def make_manifest(
     macros: List[Macro] = [],
     metrics: List[Metric] = [],
     nodes: List[ModelNode] = [],
+    saved_queries: List[SavedQuery] = [],
     selectors: Dict[str, Any] = {},
     semantic_models: List[SemanticModel] = [],
     sources: List[SourceDefinition] = [],
@@ -1015,6 +1027,7 @@ def make_manifest(
         selectors=selectors,
         groups={g.unique_id: g for g in groups},
         metadata=ManifestMetadata(adapter_type="postgres", project_name="pkg"),
+        saved_queries={s.unique_id: s for s in saved_queries},
     )
     manifest.build_parent_and_child_maps()
     return manifest
@@ -1031,6 +1044,7 @@ def manifest(
     metrics,
     semantic_models,
     files,
+    saved_queries,
 ) -> Manifest:
     return make_manifest(
         nodes=nodes,
@@ -1040,4 +1054,5 @@ def manifest(
         semantic_models=semantic_models,
         files=files,
         metrics=metrics,
+        saved_queries=saved_queries,
     )
