@@ -6,6 +6,7 @@ from dbt_semantic_interfaces.references import MeasureReference, MetricReference
 from dbt_semantic_interfaces.type_enums import (
     ConversionCalculationType,
     MetricType,
+    PeriodAggregation,
     TimeGranularity,
 )
 
@@ -81,6 +82,13 @@ class ConversionTypeParams(dbtClassMixin):
 
 
 @dataclass
+class CumulativeTypeParams(dbtClassMixin):
+    window: Optional[MetricTimeWindow] = None
+    grain_to_date: Optional[TimeGranularity] = None
+    period_agg: PeriodAggregation = PeriodAggregation.FIRST
+
+
+@dataclass
 class MetricTypeParams(dbtClassMixin):
     measure: Optional[MetricInputMeasure] = None
     input_measures: List[MetricInputMeasure] = field(default_factory=list)
@@ -91,6 +99,7 @@ class MetricTypeParams(dbtClassMixin):
     grain_to_date: Optional[TimeGranularity] = None
     metrics: Optional[List[MetricInput]] = None
     conversion_type_params: Optional[ConversionTypeParams] = None
+    cumulative_type_params: Optional[CumulativeTypeParams] = None
 
 
 @dataclass
