@@ -32,9 +32,10 @@ from dbt.adapters.exceptions import (
 from dbt.adapters.factory import get_adapter_package_names
 
 # to preserve import paths
-from dbt.artifacts.resources import BaseResource, DeferRelation, NodeVersion
+from dbt.artifacts.resources import BaseResource, DeferRelation, NodeVersion, RefArgs
 from dbt.artifacts.resources.v1.config import NodeConfig
 from dbt.artifacts.schemas.manifest import ManifestMetadata, UniqueID, WritableManifest
+from dbt.clients.jinja_static import statically_parse_ref_or_source
 from dbt.contracts.files import (
     AnySourceFile,
     FileHash,
@@ -1634,6 +1635,22 @@ class Manifest(MacroMethods, dbtClassMixin):
         source_file.saved_queries.append(saved_query.unique_id)
 
     # end of methods formerly in ParseResult
+
+    def find_node_from_ref_or_source(
+        self, expression: str
+    ) -> Optional[Union[ModelNode, SourceDefinition]]:
+        ref_or_source = statically_parse_ref_or_source(expression)
+
+        node = None
+        if isinstance(ref_or_source, RefArgs):
+            node = self.ref_lookup.find(
+                ref_or_source.name, ref_or_source.package, ref_or_source.version, self
+            )
+        else:
+            source_name, source_table_name = ref_or_source[0], ref_or_source[1]
+            node = self.source_lookup.find(f"{source_name}.{source_table_name}", None, self)
+
+        return node
 
     # Provide support for copy.deepcopy() - we just need to avoid the lock!
     # pickle and deepcopy use this. It returns a callable object used to
