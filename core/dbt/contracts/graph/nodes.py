@@ -1473,7 +1473,7 @@ class Group(GroupResource, BaseNode):
         return {
             "name": self.name,
             "package_name": self.package_name,
-            "owner": self.owner.to_dict(),
+            "owner": self.owner.to_dict(omit_none=True),
         }
 
 
