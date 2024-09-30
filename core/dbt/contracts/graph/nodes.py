@@ -1236,12 +1236,16 @@ class SourceDefinition(
         return SourceDefinitionResource
 
     def same_database_representation(self, other: "SourceDefinition") -> bool:
-        return (
-            self.database == other.database
-            and self.schema == other.schema
-            and self.identifier == other.identifier
-            and True
-        )
+
+        # preserve legacy behaviour -- use potentially rendered database
+        if get_flags().state_modified_compare_more_unrendered_values is False:
+            same_database = self.database == other.database
+            same_schema = self.schema == other.schema
+        else:
+            same_database = self.unrendered_database == other.unrendered_database
+            same_schema = self.unrendered_schema == other.unrendered_schema
+
+        return same_database and same_schema and self.identifier == other.identifier and True
 
     def same_quoting(self, other: "SourceDefinition") -> bool:
         return self.quoting == other.quoting
