@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from dbt import deprecations
 from dbt.constants import (
     LEGACY_TIME_SPINE_GRANULARITY,
     LEGACY_TIME_SPINE_MODEL_NAME,
@@ -9,6 +10,7 @@ from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import ModelNode
 from dbt.events.types import ArtifactWritten, SemanticValidationFailure
 from dbt.exceptions import ParsingError
+from dbt.flags import get_flags
 from dbt_common.clients.system import write_file
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.functions import fire_event
@@ -58,6 +60,22 @@ class SemanticManifest:
         semantic_manifest = self._get_pydantic_semantic_manifest()
         validator = SemanticManifestValidator[PydanticSemanticManifest]()
         validation_results = validator.validate_semantic_manifest(semantic_manifest)
+        time_spines = semantic_manifest.project_configuration.time_spines
+        legacy_time_spines = (
+            semantic_manifest.project_configuration.time_spine_table_configurations
+        )
+        # If the time spine contains a day grain then it is functionally equivalent to the legacy time spine.
+        time_spines_contain_day = any(
+            c for c in time_spines if c.primary_column.time_granularity == TimeGranularity.DAY
+        )
+        if (
+            get_flags().require_yaml_configuration_for_mf_time_spines is False
+            and legacy_time_spines
+            and not time_spines_contain_day
+        ):
+            deprecations.warn(
+                "mf-timespine-without-yaml-configuration",
+            )
 
         for warning in validation_results.warnings:
             fire_event(SemanticValidationFailure(msg=warning.message))
