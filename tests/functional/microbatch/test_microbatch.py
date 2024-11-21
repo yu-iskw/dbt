@@ -1,10 +1,14 @@
 from unittest import mock
 
 import pytest
+from pytest_mock import MockerFixture
 
 from dbt.events.types import (
+    ArtifactWritten,
+    EndOfRunSummary,
     GenericExceptionOnRun,
     LogModelResult,
+    MicrobatchExecutionDebug,
     MicrobatchMacroOutsideOfBatchesDeprecation,
     MicrobatchModelNoEventTimeInputs,
 )
@@ -259,12 +263,14 @@ class BaseMicrobatchTest:
 
 
 class TestMicrobatchCLI(BaseMicrobatchTest):
+    CLI_COMMAND_NAME = "run"
+
     def test_run_with_event_time(self, project):
         # run without --event-time-start or --event-time-end - 3 expected rows in output
         catcher = EventCatcher(event_to_catch=LogModelResult)
 
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
-            run_dbt(["run"], callbacks=[catcher.catch])
+            run_dbt([self.CLI_COMMAND_NAME], callbacks=[catcher.catch])
         self.assert_row_count(project, "microbatch_model", 3)
 
         assert len(catcher.caught_events) == 5
@@ -280,7 +286,7 @@ class TestMicrobatchCLI(BaseMicrobatchTest):
         # build model between 2020-01-02 >= event_time < 2020-01-03
         run_dbt(
             [
-                "run",
+                self.CLI_COMMAND_NAME,
                 "--event-time-start",
                 "2020-01-02",
                 "--event-time-end",
@@ -289,6 +295,10 @@ class TestMicrobatchCLI(BaseMicrobatchTest):
             ]
         )
         self.assert_row_count(project, "microbatch_model", 1)
+
+
+class TestMicrobatchCLIBuild(TestMicrobatchCLI):
+    CLI_COMMAND_NAME = "build"
 
 
 class TestMicroBatchBoundsDefault(BaseMicrobatchTest):
@@ -791,3 +801,75 @@ class TestMicrbobatchModelsRunWithSameCurrentTime(BaseMicrobatchTest):
 
         # they should have the same last batch because they are using the _same_ "current_time"
         assert microbatch_model_last_batch == second_microbatch_model_last_batch
+
+
+class TestMicrobatchModelStoppedByKeyboardInterrupt(BaseMicrobatchTest):
+    @pytest.fixture
+    def catch_eors(self) -> EventCatcher:
+        return EventCatcher(EndOfRunSummary)
+
+    @pytest.fixture
+    def catch_aw(self) -> EventCatcher:
+        return EventCatcher(
+            event_to_catch=ArtifactWritten,
+            predicate=lambda event: event.data.artifact_type == "RunExecutionResult",
+        )
+
+    def test_microbatch(
+        self,
+        mocker: MockerFixture,
+        project,
+        catch_eors: EventCatcher,
+        catch_aw: EventCatcher,
+    ) -> None:
+        mocked_fbs = mocker.patch(
+            "dbt.materializations.incremental.microbatch.MicrobatchBuilder.format_batch_start"
+        )
+        mocked_fbs.side_effect = KeyboardInterrupt
+        try:
+            run_dbt(["run"], callbacks=[catch_eors.catch, catch_aw.catch])
+            assert False, "KeyboardInterrupt failed to stop batch execution"
+        except KeyboardInterrupt:
+            assert len(catch_eors.caught_events) == 1
+            assert "Exited because of keyboard interrupt" in catch_eors.caught_events[0].info.msg
+            assert len(catch_aw.caught_events) == 1
+
+
+class TestMicrobatchCanRunParallelOrSequential(BaseMicrobatchTest):
+    @pytest.fixture
+    def batch_exc_catcher(self) -> EventCatcher:
+        return EventCatcher(MicrobatchExecutionDebug)  # type: ignore
+
+    def test_microbatch(
+        self, mocker: MockerFixture, project, batch_exc_catcher: EventCatcher
+    ) -> None:
+        mocked_srip = mocker.patch("dbt.task.run.MicrobatchModelRunner._should_run_in_parallel")
+
+        # Should be run in parallel
+        mocked_srip.return_value = True
+        with patch_microbatch_end_time("2020-01-03 13:57:00"):
+            _ = run_dbt(["run"], callbacks=[batch_exc_catcher.catch])
+
+        assert len(batch_exc_catcher.caught_events) > 1
+        some_batches_run_concurrently = False
+        for caugh_event in batch_exc_catcher.caught_events:
+            if "is being run concurrently" in caugh_event.data.msg:  # type: ignore
+                some_batches_run_concurrently = True
+                break
+        assert some_batches_run_concurrently, "Found no batches being run concurrently!"
+
+        # reset caught events
+        batch_exc_catcher.caught_events = []
+
+        # Should _not_ run in parallel
+        mocked_srip.return_value = False
+        with patch_microbatch_end_time("2020-01-03 13:57:00"):
+            _ = run_dbt(["run"], callbacks=[batch_exc_catcher.catch])
+
+        assert len(batch_exc_catcher.caught_events) > 1
+        some_batches_run_concurrently = False
+        for caugh_event in batch_exc_catcher.caught_events:
+            if "is being run concurrently" in caugh_event.data.msg:  # type: ignore
+                some_batches_run_concurrently = True
+                break
+        assert not some_batches_run_concurrently, "Found a batch being run concurrently!"
