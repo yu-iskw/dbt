@@ -620,7 +620,7 @@ class TestMicrobatchMultipleRetries(BaseMicrobatchTest):
 
         assert "PARTIAL SUCCESS" not in console_output
         assert "ERROR" in console_output
-        assert "Completed with 1 error, 0 partial successs, and 0 warnings" in console_output
+        assert "Completed with 1 error, 0 partial successes, and 0 warnings" in console_output
 
         self.assert_row_count(project, "microbatch_model", 2)
 
@@ -629,7 +629,7 @@ class TestMicrobatchMultipleRetries(BaseMicrobatchTest):
 
         assert "PARTIAL SUCCESS" not in console_output
         assert "ERROR" in console_output
-        assert "Completed with 1 error, 0 partial successs, and 0 warnings" in console_output
+        assert "Completed with 1 error, 0 partial successes, and 0 warnings" in console_output
 
         self.assert_row_count(project, "microbatch_model", 2)
 
