@@ -2,7 +2,7 @@ import functools
 import threading
 import time
 from copy import deepcopy
-from dataclasses import asdict, field
+from dataclasses import asdict
 from datetime import datetime
 from multiprocessing.pool import ThreadPool
 from typing import AbstractSet, Any, Dict, Iterable, List, Optional, Set, Tuple, Type
@@ -334,9 +334,12 @@ class ModelRunner(CompileRunner):
 
 
 class MicrobatchModelRunner(ModelRunner):
-    batch_idx: Optional[int] = None
-    batches: Dict[int, BatchType] = field(default_factory=dict)
-    relation_exists: bool = False
+    def __init__(self, config, adapter, node, node_index: int, num_nodes: int):
+        super().__init__(config, adapter, node, node_index, num_nodes)
+
+        self.batch_idx: Optional[int] = None
+        self.batches: Dict[int, BatchType] = {}
+        self.relation_exists: bool = False
 
     def set_batch_idx(self, batch_idx: int) -> None:
         self.batch_idx = batch_idx
@@ -704,8 +707,11 @@ class RunTask(CompileTask):
         runner: MicrobatchModelRunner,
         pool: ThreadPool,
     ) -> RunResult:
-        # Initial run computes batch metadata
+        # Initial run computes batch metadata, unless model is skipped
         result = self.call_runner(runner)
+        if result.status == RunStatus.Skipped:
+            return result
+
         batch_results: List[RunResult] = []
 
         # Execute batches serially until a relation exists, at which point future batches are run in parallel
