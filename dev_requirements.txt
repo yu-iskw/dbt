@@ -4,7 +4,7 @@ flake8>=3.5.0
 pytz==2017.2
 bumpversion==0.5.3
 tox==3.14.4
-virtualenv==20.0.3
+virtualenv==20.26.6
 six>=1.14.0
 ipdb
 pytest-xdist>=1.28.0,<2
