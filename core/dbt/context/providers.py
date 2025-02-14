@@ -62,6 +62,7 @@ from dbt.contracts.graph.nodes import (
     Resource,
     SeedNode,
     SemanticModel,
+    SnapshotNode,
     SourceDefinition,
     UnitTestNode,
 )
@@ -253,18 +254,15 @@ class BaseResolver(metaclass=abc.ABCMeta):
 
         # Only do event time filtering if the base node has the necessary event time configs
         if (
-            (
-                isinstance(target.config, NodeConfig)
-                or isinstance(target.config, SourceConfig)
-                or isinstance(target.config, SeedConfig)
-            )
+            isinstance(target.config, (NodeConfig, SeedConfig, SourceConfig))
             and target.config.event_time
-            and isinstance(self.model, ModelNode)
+            and isinstance(self.model, (ModelNode, SnapshotNode))
         ):
 
             # Handling of microbatch models
             if (
-                self.model.config.materialized == "incremental"
+                isinstance(self.model, ModelNode)
+                and self.model.config.materialized == "incremental"
                 and self.model.config.incremental_strategy == "microbatch"
                 and self.manifest.use_microbatch_batches(project_name=self.config.project_name)
                 and self.model.batch is not None
