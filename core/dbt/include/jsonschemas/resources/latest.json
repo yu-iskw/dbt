@@ -2323,9 +2323,25 @@
             "null"
           ]
         },
+        "docs": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DocsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "enabled": {
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "event_time": {
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -2336,7 +2352,19 @@
             "null"
           ]
         },
-        "meta": true,
+        "invalidate_hard_deletes": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "meta": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
         "persist_docs": {
           "anyOf": [
             {
