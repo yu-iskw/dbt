@@ -126,7 +126,7 @@ class TestList:
                 "tags": ["tag"],
                 "config": {
                     "enabled": True,
-                    "group": None,
+                    "group": "finance",
                     "materialized": "view",
                     "post-hook": [],
                     "tags": ["tag"],
@@ -326,7 +326,7 @@ class TestList:
                     },
                     "config": {
                         "enabled": True,
-                        "group": None,
+                        "group": "finance",
                         "materialized": "view",
                         "post-hook": [
                             {
@@ -615,7 +615,7 @@ class TestList:
                 "tags": ["tag"],
                 "config": {
                     "enabled": True,
-                    "group": None,
+                    "group": "finance",
                     "materialized": "seed",
                     "post-hook": [{"sql": "select 1", "transaction": True, "index": None}],
                     "tags": ["tag"],

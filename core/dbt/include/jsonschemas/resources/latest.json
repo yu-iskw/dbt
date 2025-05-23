@@ -1047,6 +1047,13 @@
       },
       "additionalProperties": false
     },
+    "GroupsConfig": {
+      "type": "object",
+      "properties": {
+        "meta": true
+      },
+      "additionalProperties": false
+    },
     "GroupsOwner": {
       "type": "object",
       "properties": {
@@ -1072,6 +1079,22 @@
         "owner"
       ],
       "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GroupsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "name": {
           "type": "string"
         },
@@ -1381,12 +1404,6 @@
             {
               "type": "null"
             }
-          ]
-        },
-        "group": {
-          "type": [
-            "string",
-            "null"
           ]
         },
         "identifier": {
@@ -1991,12 +2008,6 @@
             }
           ]
         },
-        "group": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "name": {
           "type": "string"
         },
@@ -2059,6 +2070,12 @@
           ]
         },
         "grants": true,
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "meta": {
           "type": [
             "object",
@@ -2264,12 +2281,6 @@
             }
           ]
         },
-        "group": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "meta": true,
         "name": {
           "type": "string"
@@ -2346,6 +2357,12 @@
           ]
         },
         "grants": true,
+        "group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "hard_deletes": {
           "type": [
             "string",
