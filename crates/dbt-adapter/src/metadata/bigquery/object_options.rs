@@ -197,6 +197,11 @@ pub(crate) fn get_table_options_value(
         opts.insert("partition_expiration_days".to_string(), Value::from(days));
     }
 
+    if !temporary && let Some(enabled) = config.__warehouse_specific_config__.enable_change_history
+    {
+        opts.insert("enable_change_history".to_string(), Value::from(enabled));
+    }
+
     Ok(opts)
 }
 
@@ -369,6 +374,29 @@ mod tests {
                 "TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)"
             ))
         );
+    }
+
+    #[test]
+    fn enable_change_history_is_emitted_only_for_final_tables() {
+        let env = minijinja::Environment::new();
+        let state = env.empty_state();
+        let node = InternalDbtNodeWrapper::Model(Box::default());
+        let options = |enabled: bool, temporary: bool| {
+            let mut config = ModelConfig::default();
+            config.__warehouse_specific_config__.enable_change_history = Some(enabled);
+            get_table_options_value(&state, config, &node, temporary, AdapterType::Bigquery)
+                .unwrap()
+        };
+
+        assert_eq!(
+            options(true, false).get("enable_change_history"),
+            Some(&Value::from(true))
+        );
+        assert_eq!(
+            options(false, false).get("enable_change_history"),
+            Some(&Value::from(false))
+        );
+        assert_eq!(options(true, true).get("enable_change_history"), None);
     }
 
     #[test]
