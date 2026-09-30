@@ -165,6 +165,11 @@ impl CatalogRelation {
                 && self.catalog_type.is_catalog_linked()
     }
 
+    pub fn lakehouse_catalog(&self) -> Option<&str> {
+        debug_assert_eq!(self.adapter_type, AdapterType::Bigquery);
+        self.lakehouse_catalog.as_deref()
+    }
+
     // Builder pattern setters - prefer these over introducing a new named
     // `default_catalog_relation_<adapter>_<variant>()` constructor
     pub fn with_table_format(mut self, table_format: TableFormat) -> Self {
