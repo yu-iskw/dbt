@@ -486,31 +486,6 @@ where
     }
 }
 
-/// Resolves the YAML 1.1 boolean token set PyYAML (and so dbt-core) accepts. Fusion's YAML 1.2
-/// reader resolves only `true`/`false`, so an unquoted `no` arrives here as a string. Unlike
-/// `bool_or_string_bool`, a token outside the set errors instead of silently becoming `false`.
-/// Over-accepts a quoted `"no"` that dbt-core rejects: `dbt_yaml::Value` carries no scalar style,
-/// so quoting is already lost by the time this runs.
-pub fn yaml_11_bool_default<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let value = dbt_yaml::Value::deserialize(deserializer)?;
-    if let Some(b) = value.as_bool() {
-        return Ok(b);
-    }
-    match value.as_str() {
-        // PyYAML's bool resolver: these three casings only, and no bare `y`/`n`.
-        Some("true" | "True" | "TRUE" | "yes" | "Yes" | "YES" | "on" | "On" | "ON") => Ok(true),
-        Some("false" | "False" | "FALSE" | "no" | "No" | "NO" | "off" | "Off" | "OFF") => Ok(false),
-        Some(other) => Err(de::Error::invalid_value(
-            de::Unexpected::Str(other),
-            &"a boolean",
-        )),
-        None => Err(de::Error::custom("expected a boolean")),
-    }
-}
-
 pub fn default_true() -> Option<bool> {
     Some(true)
 }
