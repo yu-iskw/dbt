@@ -426,8 +426,8 @@ impl CatalogRelation {
 
     // The bare-string "linked database name" call shape (used by
     // `drop.sql`) is intercepted earlier, in `from_model_config_and_catalogs`,
-    // via `from_linked_database_name` -- before this deprecated/default branch, since
-    // the default (formerly v2) path has no concept of it. It should never reach this function.
+    // via `from_linked_database_name` -- before this deprecated/active branch, since
+    // the active path has no concept of it. It should never reach this function.
     pub(crate) fn deprecated_from_model_config_and_catalogs_snowflake(
         model: &Value,
         catalogs: Option<Arc<DbtCatalogs>>,
@@ -455,7 +455,7 @@ impl CatalogRelation {
 
         match (model_catalog_name.as_deref(), catalogs.as_ref()) {
             // No reconciliation path: only values present on the model config are used.
-            // This represents the "legacy" or v1 Iceberg tables/iceberg tables
+            // This represents the legacy/deprecated-schema Iceberg tables
             // which are Snowflake only and do not use the catalogs.yml.
             (None, _) => Self::build_without_catalogs_yml(model),
 

@@ -1,10 +1,9 @@
 use dbt_adapter_core::AdapterType;
 use dbt_common::string_utils::try_parse_bool_str;
-use dbt_schemas::schemas::dbt_catalogs::DbtCatalogs;
-use dbt_schemas::schemas::dbt_catalogs_v2::{
-    CatalogSpecV2View, CatalogType, DbtCatalogsV2View, PhysicalFormatResolver, UniformMode,
-    V2FileFormat,
+use dbt_schemas::schemas::dbt_catalogs::{
+    CatalogSpecView, CatalogType, DbtCatalogsView, FileFormat, PhysicalFormatResolver, UniformMode,
 };
+use dbt_schemas::schemas::dbt_catalogs_deprecated::DbtCatalogs;
 use dbt_schemas::schemas::relations::base::TableFormat;
 
 use dbt_yaml as yml;
@@ -160,13 +159,13 @@ impl PhysicalFormatResolver for CatalogRelation {
 }
 
 impl CatalogRelation {
-    // safety: v1 uses adapter_properties, v2 uses catalog_database
+    // safety: the deprecated builders use adapter_properties, the plain ones use catalog_database
     pub fn has_catalog_linked_database(&self) -> bool {
-        // v1
+        // deprecated
         self.adapter_properties
             .get("catalog_linked_database")
             .is_some_and(|v| !v.trim().is_empty())
-            // v2
+            // plain
             || self.catalog_database.as_deref().is_some_and(|v| !v.trim().is_empty())
                 && self.catalog_type.is_catalog_linked()
     }
@@ -200,7 +199,7 @@ impl CatalogRelation {
     fn linked_catalog_provider(&self) -> Option<LinkedCatalogProvider> {
         let catalog_name = self.catalog_name.as_deref()?;
         let catalogs = load_catalogs::fetch_catalogs()?;
-        let view = catalogs.view_v2().ok()?;
+        let view = catalogs.view().ok()?;
         let catalog = view
             .catalogs
             .iter()
@@ -221,10 +220,11 @@ impl CatalogRelation {
         // A bare string is a distinct request shape (Snowflake's "drop a
         // catalog-linked database by name" caller, see `drop.sql`), not a
         // model config at all -- it means something different regardless of
-        // whether catalogs.yml v1 or v2 is active, so it must be intercepted
-        // here, before the v1/v2 branch, rather than inside each per-adapter
-        // resolver. Previously this dispatched into the v1/v2 branch first,
-        // so v2 (which has no concept of this call shape) received bare
+        // whether catalogs.yml is on the deprecated or active schema, so it
+        // must be intercepted here, before the deprecated/active branch,
+        // rather than inside each per-adapter resolver. Previously this
+        // dispatched into the deprecated/active branch first, so the active
+        // path (which has no concept of this call shape) received bare
         // strings and hit an unreachable-in-theory `debug_assert!`. See
         // dbt-labs/fs#<TODO: file number>.
         if model.kind() == ValueKind::String {
@@ -244,8 +244,8 @@ impl CatalogRelation {
     /// database (CLD, e.g. Glue) before deciding how to drop. This is a
     /// distinct request shape from a model config and is handled uniformly
     /// here regardless of the active catalogs.yml version -- CLD-linked-
-    /// database detection currently has no v2 (`DbtCatalogsV2View`)
-    /// implementation, so it always resolves against the v1 view.
+    /// database detection currently has no active-schema (`DbtCatalogsView`)
+    /// implementation, so it always resolves against the deprecated view.
     fn from_linked_database_name(
         adapter_type: AdapterType,
         model: &Value,
@@ -1157,8 +1157,8 @@ fn from_model_config_and_catalogs_default(
         ))?,
     };
 
-    let spec = parse_v2_view(&catalogs)?;
-    let catalog = find_v2_catalog(&spec, &catalog_name)?;
+    let spec = parse_catalogs_view(&catalogs)?;
+    let catalog = find_catalog_in_view(&spec, &catalog_name)?;
 
     if CatalogRelation::get_model_config_value(model, FIELD_CATALOG_TYPE, adapter_type).is_some() {
         return Err(AdapterError::new(
@@ -1281,9 +1281,9 @@ fn from_model_config_and_catalogs_default(
     }
 }
 
-fn parse_v2_view<'a>(catalogs: &'a DbtCatalogs) -> AdapterResult<DbtCatalogsV2View<'a>> {
+fn parse_catalogs_view<'a>(catalogs: &'a DbtCatalogs) -> AdapterResult<DbtCatalogsView<'a>> {
     catalogs
-        .view_v2()
+        .view()
         .map_err(|e| AdapterError::new(AdapterErrorKind::Configuration, format!("{e}")))
 }
 
@@ -1351,10 +1351,10 @@ fn is_valid_databricks_file_format(v: &str) -> bool {
         || v.eq_ignore_ascii_case("hudi")
 }
 
-fn find_v2_catalog<'a>(
-    spec: &'a DbtCatalogsV2View<'a>,
+fn find_catalog_in_view<'a>(
+    spec: &'a DbtCatalogsView<'a>,
     catalog_name: &str,
-) -> AdapterResult<&'a CatalogSpecV2View<'a>> {
+) -> AdapterResult<&'a CatalogSpecView<'a>> {
     spec.catalogs
         .iter()
         .find(|catalog| catalog.name == catalog_name)
@@ -1367,7 +1367,7 @@ fn find_v2_catalog<'a>(
 }
 
 fn require_platform_block<'a>(
-    catalog: &'a CatalogSpecV2View<'a>,
+    catalog: &'a CatalogSpecView<'a>,
     catalog_name: &str,
     platform: &str,
 ) -> AdapterResult<&'a yml::Mapping> {
@@ -1428,7 +1428,7 @@ fn reject_unsupported_databricks_hive_model_fields(model: &Value) -> AdapterResu
 impl CatalogRelation {
     fn build_databricks_unity_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let databricks = require_platform_block(catalog, catalog_name, "databricks")?;
@@ -1468,21 +1468,21 @@ impl CatalogRelation {
             adapter_properties.insert(ADAPTER_PROP_LOCATION_ROOT.to_string(), location_root);
         }
 
-        let file_format_enum = V2FileFormat::parse(&file_format, None)
+        let file_format_enum = FileFormat::parse(&file_format, None)
             .map_err(|e| AdapterError::new(AdapterErrorKind::Configuration, format!("{e}")))?;
 
         match (file_format_enum, use_uniform) {
-            (V2FileFormat::Delta, UniformMode::Enabled)
-            | (V2FileFormat::Parquet, UniformMode::Disabled) => Ok(()),
-            (V2FileFormat::Delta, UniformMode::Disabled) => Err(AdapterError::new(
+            (FileFormat::Delta, UniformMode::Enabled)
+            | (FileFormat::Parquet, UniformMode::Disabled) => Ok(()),
+            (FileFormat::Delta, UniformMode::Disabled) => Err(AdapterError::new(
                 AdapterErrorKind::Configuration,
                 "Databricks v2 unity use_uniform: false (or unset) requires file_format: parquet",
             )),
-            (V2FileFormat::Parquet, UniformMode::Enabled) => Err(AdapterError::new(
+            (FileFormat::Parquet, UniformMode::Enabled) => Err(AdapterError::new(
                 AdapterErrorKind::Configuration,
                 "Databricks v2 unity use_uniform: true requires file_format: delta",
             )),
-            (V2FileFormat::Hudi, _) => Err(AdapterError::new(
+            (FileFormat::Hudi, _) => Err(AdapterError::new(
                 AdapterErrorKind::Configuration,
                 "Databricks v2 unity does not support file_format 'hudi' (use delta or parquet)",
             )),
@@ -1510,7 +1510,7 @@ impl CatalogRelation {
 
     fn build_databricks_hive_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         reject_unsupported_databricks_hive_model_fields(model)?;
@@ -1549,7 +1549,7 @@ impl CatalogRelation {
 
     fn build_snowflake_linked_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
         type_name: &str,
     ) -> AdapterResult<CatalogRelation> {
@@ -1625,7 +1625,7 @@ impl CatalogRelation {
 
     fn build_horizon_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         // FIXME(versusfacit): we just swallow transient here for now instead of
@@ -1757,7 +1757,7 @@ impl CatalogRelation {
 
     fn build_bigquery_biglake_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let bigquery = require_platform_block(catalog, catalog_name, "bigquery")?;
@@ -1882,7 +1882,7 @@ impl CatalogRelation {
     /// field Lake Compute uses for Horizon and Iceberg REST:
     /// `catalog_database` from `config.snowflake`.
     fn build_lake_compute_with_catalogs(
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let snowflake = require_platform_block(catalog, catalog_name, "snowflake")?;
@@ -1916,7 +1916,7 @@ impl CatalogRelation {
 
     fn build_duckdb_with_catalogs(
         _model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let duckdb = require_platform_block(catalog, catalog_name, "duckdb")?;
@@ -1975,7 +1975,7 @@ impl CatalogRelation {
 
     fn build_duckdb_ducklake_with_catalogs(
         _model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let duckdb = require_platform_block(catalog, catalog_name, "duckdb")?;
@@ -2022,7 +2022,7 @@ impl CatalogRelation {
 
     fn build_duckdb_local_filesystem_with_catalogs(
         model: &Value,
-        catalog: &CatalogSpecV2View<'_>,
+        catalog: &CatalogSpecView<'_>,
         catalog_name: &str,
     ) -> AdapterResult<CatalogRelation> {
         let duckdb = require_platform_block(catalog, catalog_name, "duckdb")?;
@@ -2132,20 +2132,20 @@ mod default_relation_tests {
     }
 
     fn load_catalogs_yaml(yaml: &str) -> DbtCatalogs {
-        use dbt_schemas::schemas::dbt_catalogs_v2::validate_catalogs_v2;
+        use dbt_schemas::schemas::dbt_catalogs::validate_catalogs;
         let parsed: dbt_yaml::Value = dbt_yaml::from_str(yaml).expect("valid YAML");
         let (repr, span) = match parsed {
             dbt_yaml::Value::Mapping(m, s) => (m, s),
             _ => panic!("expected top-level mapping"),
         };
         let catalogs = DbtCatalogs::new(repr, span);
-        let view = catalogs.view_v2().expect("valid v2 view");
-        validate_catalogs_v2(&view, Path::new("<test>")).expect("valid v2 catalogs");
+        let view = catalogs.view().expect("valid v2 view");
+        validate_catalogs(&view, Path::new("<test>")).expect("valid v2 catalogs");
         catalogs
     }
 
     #[test]
-    fn databricks_v2_unity_catalog_builds_relation() {
+    fn databricks_unity_catalog_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2204,7 +2204,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_iceberg_without_catalog_name_defaults_to_managed_iceberg() {
+    fn databricks_iceberg_without_catalog_name_defaults_to_managed_iceberg() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2244,7 +2244,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_iceberg_use_uniform_false_without_catalog_name_succeeds() {
+    fn databricks_iceberg_use_uniform_false_without_catalog_name_succeeds() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2282,7 +2282,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_iceberg_explicit_use_uniform_true_without_catalog_name_succeeds() {
+    fn databricks_iceberg_explicit_use_uniform_true_without_catalog_name_succeeds() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2320,7 +2320,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_unity_catalog_builds_relation_parquet_managed_iceberg() {
+    fn databricks_unity_catalog_builds_relation_parquet_managed_iceberg() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2353,7 +2353,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_unity_catalog_database() {
+    fn databricks_unity_catalog_database() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2385,7 +2385,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_horizon_catalog_database() {
+    fn snowflake_horizon_catalog_database() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2417,7 +2417,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_no_catalog_name_default_honors_location_root() {
+    fn databricks_no_catalog_name_default_honors_location_root() {
         let catalogs = load_catalogs_yaml("catalogs: []\n");
         let conf = json!({
             "location_root": "s3://bucket/root",
@@ -2445,7 +2445,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_horizon_iceberg_with_external_volume_synthesizes_base_location() {
+    fn snowflake_horizon_iceberg_with_external_volume_synthesizes_base_location() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2486,8 +2486,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_horizon_iceberg_explicit_snowflake_managed_external_volume_omits_base_location()
-    {
+    fn snowflake_horizon_iceberg_explicit_snowflake_managed_external_volume_omits_base_location() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2526,7 +2525,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_horizon_iceberg_without_catalog_omits_external_volume_and_base_location() {
+    fn snowflake_horizon_iceberg_without_catalog_omits_external_volume_and_base_location() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2565,7 +2564,7 @@ catalogs:
     }
 
     #[test]
-    fn bigquery_v2_biglake_catalog_database() {
+    fn bigquery_biglake_catalog_database() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2603,7 +2602,7 @@ catalogs:
     }
 
     #[test]
-    fn bigquery_v2_biglake_lakehouse_catalog() {
+    fn bigquery_biglake_lakehouse_catalog() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2642,7 +2641,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_unity_model_override_rejects_invalid_combo() {
+    fn databricks_unity_model_override_rejects_invalid_combo() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2680,7 +2679,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_unity_model_override_rejects_delta_without_use_uniform() {
+    fn databricks_unity_model_override_rejects_delta_without_use_uniform() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2714,7 +2713,7 @@ catalogs:
     }
 
     #[test]
-    fn databricks_v2_hive_metastore_allows_hudi() {
+    fn databricks_hive_metastore_allows_hudi() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2748,7 +2747,7 @@ catalogs:
     }
 
     #[test]
-    fn v2_rejects_model_adapter_properties() {
+    fn rejects_model_adapter_properties() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2783,7 +2782,7 @@ catalogs:
     }
 
     #[test]
-    fn bigquery_v2_biglake_catalog_builds_relation() {
+    fn bigquery_biglake_catalog_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2830,7 +2829,7 @@ catalogs:
     }
 
     #[test]
-    fn bigquery_v2_biglake_model_values_override_yaml_values() {
+    fn bigquery_biglake_model_values_override_yaml_values() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2874,7 +2873,7 @@ catalogs:
     }
 
     #[test]
-    fn bigquery_v2_biglake_catalog_connection_id_ok() {
+    fn bigquery_biglake_catalog_connection_id_ok() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2923,7 +2922,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_unity_catalog_builds_cld_relation() {
+    fn snowflake_unity_catalog_builds_cld_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -2959,7 +2958,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_unity_uses_yaml_catalog_database_over_model_database() {
+    fn snowflake_unity_uses_yaml_catalog_database_over_model_database() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3048,7 +3047,7 @@ catalogs:
     }
 
     #[test]
-    fn snowflake_v2_unity_rejects_stubbed_model_fields() {
+    fn snowflake_unity_rejects_stubbed_model_fields() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3136,7 +3135,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_iceberg_rest_catalog_builds_relation() {
+    fn duckdb_iceberg_rest_catalog_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3172,7 +3171,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_iceberg_rest_missing_duckdb_config_errors() {
+    fn duckdb_iceberg_rest_missing_duckdb_config_errors() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3195,7 +3194,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_local_filesystem_builds_relation() {
+    fn duckdb_local_filesystem_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3227,7 +3226,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_catalog_name_none_sentinel_returns_default() {
+    fn duckdb_catalog_name_none_sentinel_returns_default() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3249,7 +3248,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_catalog_alias_builds_relation() {
+    fn duckdb_catalog_alias_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3272,7 +3271,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_horizon_unity_model_targets_build() {
+    fn duckdb_horizon_unity_model_targets_build() {
         // Writes are enabled for Horizon/Unity in this PR (duckdb 1.5.4
         // write-compat), lifting the base PR's read-only model-target gate:
         // a model naming one as its catalog builds a relation like any other
@@ -3312,7 +3311,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_stage_create_tables_steers_write_strategy() {
+    fn duckdb_stage_create_tables_steers_write_strategy() {
         // Unset (and explicit false): iceberg catalogs write via the safe empty
         // CREATE + INSERT. Explicit `stage_create_tables: true` opts in to
         // staged creates, so dbt may CTAS the target in place
@@ -3367,7 +3366,7 @@ catalogs:
     // ===== DuckLake v2 tests =====
 
     #[test]
-    fn duckdb_v2_ducklake_builds_relation() {
+    fn duckdb_ducklake_builds_relation() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3405,7 +3404,7 @@ catalogs:
     }
 
     #[test]
-    fn duckdb_v2_ducklake_with_data_path() {
+    fn duckdb_ducklake_with_data_path() {
         let catalogs = load_catalogs_yaml(
             r#"
 catalogs:
@@ -3652,7 +3651,7 @@ mod has_catalog_linked_database_tests {
     }
 
     #[test]
-    fn v1_catalog_linked_database_is_linked() {
+    fn deprecated_catalog_linked_database_is_linked() {
         let mut relation = snowflake(CatalogType::IcebergRest);
         relation.adapter_properties.insert(
             "catalog_linked_database".to_string(),
@@ -3671,14 +3670,14 @@ mod has_catalog_linked_database_tests {
     }
 
     #[test]
-    fn v2_catalog_database_on_a_linked_catalog_is_linked() {
+    fn catalog_database_on_a_linked_catalog_is_linked() {
         let mut relation = snowflake(CatalogType::IcebergRest);
         relation.catalog_database = Some("MY_LINKED_DB".to_string());
         assert!(relation.has_catalog_linked_database());
     }
 
     #[test]
-    fn v2_catalog_database_on_the_managed_catalog_is_not_linked() {
+    fn catalog_database_on_the_managed_catalog_is_not_linked() {
         let mut relation = snowflake(CatalogType::SnowflakeBuiltIn);
         relation.catalog_database = Some("ANALYTICS_ICEBERG".to_string());
         assert!(!relation.has_catalog_linked_database());

@@ -327,8 +327,8 @@ impl AdbcEngine {
         let mut all_stmts = dbt_auth::generate_duckdb_init_sql(config)
             .map_err(crate::errors::auth_error_to_adapter_error)?;
 
-        // Append v2 catalog-driven ATTACH statements for DuckDB REST catalogs
-        all_stmts.extend(self.generate_v2_catalog_attach_stmts()?);
+        // Append catalog-driven ATTACH statements for DuckDB REST catalogs
+        all_stmts.extend(self.generate_catalog_attach_stmts()?);
 
         if all_stmts.is_empty() {
             return Ok(());
@@ -350,13 +350,13 @@ impl AdbcEngine {
         Ok(())
     }
 
-    /// Build v2 catalog-driven `ATTACH IF NOT EXISTS` statements for DuckDB
+    /// Build catalog-driven `ATTACH IF NOT EXISTS` statements for DuckDB
     /// Horizon, Glue, Iceberg REST, Unity Catalog, and DuckLake catalogs.
     ///
-    /// Reads the global catalogs v2 state, extracts every catalog that has a
+    /// Reads the global catalogs state, extracts every catalog that has a
     /// `config.duckdb` block, and emits one ATTACH per catalog. Duplicate
     /// aliases (after sanitization) are rejected with an error.
-    fn generate_v2_catalog_attach_stmts(&self) -> AdapterResult<Vec<String>> {
+    fn generate_catalog_attach_stmts(&self) -> AdapterResult<Vec<String>> {
         use crate::load_catalogs;
 
         if !load_catalogs::fetch_use_catalogs_v2() {
@@ -365,7 +365,7 @@ impl AdbcEngine {
         let Some(catalogs) = load_catalogs::fetch_catalogs() else {
             return Ok(Vec::new());
         };
-        let Ok(view) = catalogs.view_v2() else {
+        let Ok(view) = catalogs.view() else {
             return Ok(Vec::new());
         };
         // The compute engine attaches via each catalog's `lake_compute`
@@ -376,7 +376,7 @@ impl AdbcEngine {
         } else {
             AdapterType::DuckDB.as_ref()
         };
-        super::duckdb_attach::compose_v2_catalog_attach_stmts(&view, platform)
+        super::duckdb_attach::compose_catalog_attach_stmts(&view, platform)
     }
 }
 

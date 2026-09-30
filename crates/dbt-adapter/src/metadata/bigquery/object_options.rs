@@ -255,7 +255,7 @@ fn iceberg_table_options(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbt_schemas::schemas::dbt_catalogs_v2::CatalogType;
+    use dbt_schemas::schemas::dbt_catalogs::CatalogType;
     use dbt_schemas::schemas::relations::base::TableFormat;
     use dbt_schemas::schemas::serde::StringOrInteger;
     use std::collections::BTreeMap;
