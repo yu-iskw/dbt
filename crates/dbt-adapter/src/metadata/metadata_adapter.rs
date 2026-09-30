@@ -190,6 +190,19 @@ pub trait MetadataAdapter: Send + Sync {
         token: CancellationToken,
     ) -> AsyncAdapterResult<'_, HashMap<String, AdapterResult<Arc<Schema>>>>;
 
+    /// Add adapter-provided semantics to schemas fetched from the warehouse.
+    ///
+    /// Implementations should encode relation-local semantics in Arrow metadata so
+    /// they survive schema caching, replay, scans, and relation aliases.
+    fn enrich_relation_schemas<'a>(
+        &'a self,
+        _relations: &'a [Arc<dyn BaseRelation>],
+        schemas: HashMap<String, AdapterResult<Arc<Schema>>>,
+        _token: CancellationToken,
+    ) -> AsyncAdapterResult<'a, HashMap<String, AdapterResult<Arc<Schema>>>> {
+        Box::pin(async move { Ok(schemas) })
+    }
+
     /// List relations and their schemas.
     ///
     /// This is a provided method that wraps `list_relations_schemas_inner`
@@ -203,21 +216,30 @@ pub trait MetadataAdapter: Send + Sync {
         token: CancellationToken,
     ) -> AsyncAdapterResult<'a, HashMap<String, AdapterResult<Arc<Schema>>>> {
         let caller_id = unique_id.clone().unwrap_or_else(|| "global".to_string());
+        let inner_unique_id = unique_id.clone();
+        let inner_token = token.clone();
+        let future = async move {
+            let schemas = self
+                .list_relations_schemas_inner(
+                    inner_unique_id,
+                    phase,
+                    relations,
+                    item_span_operation_id,
+                    inner_token,
+                )
+                .await?;
+            self.enrich_relation_schemas(relations, schemas, token)
+                .await
+        };
         with_time_machine_metadata_wrapper(
             caller_id,
             "list_relations_schemas",
             args_list_relations_schemas(
-                unique_id.clone(),
+                unique_id,
                 phase.map(|p| p.as_str().to_string()),
                 relations.iter().map(|r| r.semantic_fqn()),
             ),
-            self.list_relations_schemas_inner(
-                unique_id,
-                phase,
-                relations,
-                item_span_operation_id,
-                token,
-            ),
+            future,
         )
     }
 
