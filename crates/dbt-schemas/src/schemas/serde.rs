@@ -269,6 +269,60 @@ where
         .unwrap_or_default())
 }
 
+/// Resolver (private) of the YAML 1.1 boolean token set accepted by dbt-core (via PyYAML).
+///
+/// dbt-yaml's `yaml_11` feature already resolves the unquoted tokens, so those arrive here as
+/// booleans. Strings still arrive too, because Jinja output reaches serde as one.
+/// Those are parsed again as a YAML document.
+///
+/// This resolver reports an explicit `null` as `Ok(None)` and is a workhorse in the following
+/// public deserializers that differ in only what they do with that `None`.
+fn yaml_11_bool_token<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = dbt_yaml::Value::deserialize(deserializer)?;
+    if let Some(b) = value.as_bool() {
+        return Ok(Some(b));
+    }
+    if value.is_null() {
+        return Ok(None);
+    }
+    match value.as_str() {
+        // The inner parse error would point at a line and column of `s`, not of the file.
+        Some(s) => dbt_yaml::from_str::<bool>(s)
+            .map(Some)
+            .map_err(|_| de::Error::invalid_value(de::Unexpected::Str(s), &"a boolean")),
+        None => Err(de::Error::custom("expected a boolean")),
+    }
+}
+
+/// YAML 1.1 boolean resolver that reads an explicit `null` is a value of its own, not an error and
+/// not `false`.
+pub fn yaml_11_bool_null_as_none<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    yaml_11_bool_token(deserializer)
+}
+
+/// YAML 1.1 boolean resolver that reads an explicit `null` as `false`.
+pub fn yaml_11_bool_null_as_false<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(yaml_11_bool_token(deserializer)?.unwrap_or(false))
+}
+
+/// Schema-only shape for a boolean that may be authored as a Jinja expression string.
+/// Use as `#[schemars(with = "BoolOrJinja")]` on a `bool` or `Option<bool>` field.
+#[derive(Debug, Clone, DbtSchema)]
+#[serde(untagged)]
+pub enum BoolOrJinja {
+    Bool(bool),
+    Jinja(String),
+}
+
 pub fn u64_or_string_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
 where
     D: Deserializer<'de>,
