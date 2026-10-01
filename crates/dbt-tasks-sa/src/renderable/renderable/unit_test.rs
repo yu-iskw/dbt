@@ -2657,7 +2657,7 @@ fn parse_csv_rows(data: &[u8]) -> FsResult<Vec<BTreeMap<String, YmlValue>>> {
         let mut row = BTreeMap::new();
         for (i, header) in headers.iter().enumerate() {
             let value = match record.get(i) {
-                None => YmlValue::null(),
+                None | Some("") => YmlValue::null(),
                 Some(field) => YmlValue::string(field.to_string()),
             };
             row.insert(header.to_string(), value);
@@ -2769,9 +2769,10 @@ mod tests {
         }
     }
     #[test]
-    fn test_parse_csv_rows_preserves_scalar_text() {
-        let rows = parse_csv_rows(b"id,code,enabled,ratio,empty\n1,000001,true,1.5,\n")
-            .expect("present CSV cells should preserve DictReader string semantics");
+    fn test_parse_csv_rows_preserves_non_empty_scalar_text_and_nulls_empty_cells() {
+        let rows =
+            parse_csv_rows(b"id,code,enabled,ratio,empty,quoted_empty\n1,000001,true,1.5,,\"\"\n")
+                .expect("non-empty CSV cells should remain text and empty cells should be null");
 
         assert_eq!(rows.len(), 1);
         for (column, expected) in [
@@ -2779,13 +2780,14 @@ mod tests {
             ("code", "000001"),
             ("enabled", "true"),
             ("ratio", "1.5"),
-            ("empty", ""),
         ] {
             assert_eq!(
                 rows[0].get(column),
                 Some(&YmlValue::string(expected.to_string()))
             );
         }
+        assert_eq!(rows[0].get("empty"), Some(&YmlValue::null()));
+        assert_eq!(rows[0].get("quoted_empty"), Some(&YmlValue::null()));
     }
 
     #[test]
