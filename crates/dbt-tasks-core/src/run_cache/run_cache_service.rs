@@ -598,7 +598,7 @@ pub fn insert_compiled_view_definition(
     // produces quoted-lowercase synthetic relations downstream that don't
     // resolve in the warehouse — see `test_transitive_dependencies_tracked`.
     let fqn = relation.semantic_fqn();
-    let (default_catalog, default_schema) = match dialect.parse_fqn(&fqn) {
+    let (default_catalog, default_schema) = match FullyQualifiedName::parse(&fqn, dialect) {
         Ok(parsed) => (
             parsed.catalog().name().to_string(),
             parsed.schema().name().to_string(),

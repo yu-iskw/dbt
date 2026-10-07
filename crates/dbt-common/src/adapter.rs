@@ -1,5 +1,5 @@
 use dbt_adapter_core::AdapterType;
-use dbt_frontend_common::dialect::Dialect;
+use dbt_frontend_common::Dialect;
 
 pub fn dialect_of(adapter_type: AdapterType) -> Option<Dialect> {
     use AdapterType::*;
