@@ -2204,6 +2204,28 @@ mod compare_record_batches_tests {
         assert_eq!(diff_value(&result), "0.3 -> 0.30000000000000004");
     }
 
+    // 300.0 and 0.0 are exact f32 values. A rule that treats "exact f32, and the
+    // other side rounds to that f32" as equal also accepts a different DOUBLE.
+    #[test]
+    fn float64_exact_integer_does_not_match_nearby_literal() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![300.00001, 300.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "300.00001 -> 300.0");
+    }
+
+    #[test]
+    fn float64_zero_does_not_match_tiny_literal() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![1e-46, 0.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "1e-46 -> 0.0");
+    }
+
     #[test]
     fn widened_float32_matches_same_f64_literal() {
         // `cast(0.1 as float)` promoted next to `CAST(0.1 AS float8)` is the
