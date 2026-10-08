@@ -342,6 +342,11 @@ impl DefaultTypeOps {
                 _ => "integer",
             },
 
+            // Redshift REAL/FLOAT4 is binary32. Bare FLOAT and FLOAT8 are
+            // binary64, so the fixture cast must say real. DuckDB's "float"
+            // spelling is 32-bit only on DuckDB.
+            (SqlType::Real, Redshift) => "real",
+
             // ## convert_number_type() - Float32
             (SqlType::Real | SqlType::HalfFloat, _) => match adapter_type {
                 Bigquery => "float64",
