@@ -1820,7 +1820,7 @@ pub fn compare_record_batches(
                     let actual_val = value_as_string(col, *a, data_type);
                     let expected_val = value_as_string(col, *e, data_type);
 
-                    if actual_val == expected_val || float_values_equal(col, *a, *e, data_type) {
+                    if actual_val == expected_val {
                         expected_val
                     } else {
                         has_differences = true;
@@ -1871,38 +1871,6 @@ pub fn compare_record_batches(
         diff_batch,
         has_differences,
     })
-}
-
-/// True when two float cells are the same number even if their formatted text differs.
-///
-/// A `FLOAT` value promoted beside a `float8` fixture is the f32 bits widened to
-/// f64. That widened value matches the f64 literal when the literal rounds back
-/// to the same f32 (`0.1` written in YAML vs `cast(0.1 as float)`). It does not
-/// match a nearby f64 that is not an exact f32 (`0.1 + 0.2` vs `0.3`).
-fn float_values_equal(
-    array: &ArrayRef,
-    actual_idx: usize,
-    expected_idx: usize,
-    data_type: &DataType,
-) -> bool {
-    if *data_type != DataType::Float64 {
-        return false;
-    }
-    let Some(arr) = array.as_any().downcast_ref::<Float64Array>() else {
-        return false;
-    };
-    if arr.is_null(actual_idx) || arr.is_null(expected_idx) {
-        return false;
-    }
-    let actual = arr.value(actual_idx);
-    let expected = arr.value(expected_idx);
-    if actual == expected || (actual.is_nan() && expected.is_nan()) {
-        return true;
-    }
-    let actual_as_f32 = actual as f32 as f64;
-    let expected_as_f32 = expected as f32 as f64;
-    (actual == actual_as_f32 && expected_as_f32 == actual)
-        || (expected == expected_as_f32 && actual_as_f32 == expected)
 }
 
 /// Shortest round-trip text. `{:.1}` made `0.01` and `0.0` compare equal.
@@ -2227,21 +2195,23 @@ mod compare_record_batches_tests {
     }
 
     #[test]
-    fn widened_float32_matches_same_f64_literal() {
-        // `cast(0.1 as float)` promoted next to `CAST(0.1 AS float8)` is the
-        // f32 value widened to f64, not the f64 literal. Those are the same
-        // number a unit test author wrote.
+    fn widened_float32_does_not_match_f64_literal() {
+        // These bits differ. A FLOAT column is compared as float32 before any
+        // union with a float8 fixture; this function must not treat the widened
+        // bits as the f64 literal.
         let positive = compare_floats(
             DataType::Float64,
             Arc::new(Float64Array::from(vec![0.1, 0.1f32 as f64])),
         );
-        assert!(!positive.has_differences);
+        assert!(positive.has_differences);
+        assert_eq!(diff_value(&positive), "0.1 -> 0.10000000149011612");
 
         let negative = compare_floats(
             DataType::Float64,
             Arc::new(Float64Array::from(vec![-0.1, -0.1f32 as f64])),
         );
-        assert!(!negative.has_differences);
+        assert!(negative.has_differences);
+        assert_eq!(diff_value(&negative), "-0.1 -> -0.10000000149011612");
     }
 
     #[test]

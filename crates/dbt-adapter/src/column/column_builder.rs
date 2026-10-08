@@ -690,6 +690,21 @@ mod tests {
     }
 
     #[test]
+    fn test_build_duckdb_float32_stays_float() {
+        let type_ops = DefaultTypeOps::new(AdapterType::DuckDB);
+        let builder = ColumnBuilder::new(AdapterType::DuckDB);
+
+        let float32 = Arc::new(Field::new("value", DataType::Float32, true));
+        assert_eq!(builder.build(&float32, &type_ops).unwrap().dtype(), "float");
+
+        let float64 = Arc::new(Field::new("value", DataType::Float64, true));
+        assert_eq!(
+            builder.build(&float64, &type_ops).unwrap().dtype(),
+            "float8"
+        );
+    }
+
+    #[test]
     fn test_strip_clickhouse_wrappers_unwrapped() {
         assert_eq!(ColumnBuilder::strip_clickhouse_wrappers("String"), "String");
         assert_eq!(

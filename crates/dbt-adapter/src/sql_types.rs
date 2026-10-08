@@ -349,6 +349,10 @@ impl DefaultTypeOps {
                 Fabric => "real",
                 // Exasol float type is DOUBLE PRECISION (no float8 alias).
                 Exasol => "DOUBLE PRECISION",
+                // DuckDB FLOAT/REAL is 32-bit. float8 widens the fixture, and
+                // the unit-test UNION then promotes the model value to a
+                // different f64. LakeCompute speaks the DuckDB dialect.
+                DuckDB | LakeCompute => "float",
                 _ => "float8",
             },
 
@@ -1392,6 +1396,14 @@ mod tests {
         let err = clickhouse::try_format_type(&DataType::Struct(fields), true, &mut out)
             .expect_err("structs must not silently format as String");
         assert_eq!(err.kind(), AdapterErrorKind::UnsupportedType);
+    }
+
+    #[test]
+    fn duckdb_real_formats_as_float_not_float8() {
+        assert_eq!(convert_type(&DataType::Float32, DuckDB), "float");
+        assert_eq!(convert_type(&DataType::Float64, DuckDB), "float8");
+        assert_eq!(convert_type(&DataType::Float32, LakeCompute), "float");
+        assert_eq!(convert_type(&DataType::Float64, LakeCompute), "float8");
     }
 
     #[test]
