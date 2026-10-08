@@ -1946,7 +1946,10 @@ fn value_as_string(array: &ArrayRef, index: usize, data_type: &DataType) -> Stri
 #[cfg(test)]
 mod compare_record_batches_tests {
     use super::compare_record_batches;
-    use arrow::array::{BinaryArray, Int32Array, Int64Array, StringViewArray};
+    use arrow::array::{
+        ArrayRef, BinaryArray, Float32Array, Float64Array, Int32Array, Int64Array, StringArray,
+        StringViewArray,
+    };
     use arrow::datatypes::{DataType, Field, Schema};
     use std::sync::Arc;
 
@@ -2061,6 +2064,189 @@ mod compare_record_batches_tests {
 
         let result = compare_record_batches(&batch).unwrap();
         assert!(!result.has_differences);
+    }
+
+    // `{:.1}` turned 0.01 into 0.0 and 0.76 into 0.8, so unequal floats compared
+    // equal. dbt-labs/dbt#16651
+    fn compare_floats(data_type: DataType, values: ArrayRef) -> super::CompareRecordBatchResult {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("actual_or_expected", DataType::Utf8, false),
+            Field::new("value", data_type, true),
+        ]));
+        let batch = arrow::array::RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(vec!["expected", "actual"])),
+                values,
+            ],
+        )
+        .unwrap();
+        compare_record_batches(&batch).unwrap()
+    }
+
+    fn diff_value(result: &super::CompareRecordBatchResult) -> String {
+        result
+            .diff_batch
+            .column_by_name("value")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(0)
+            .to_string()
+    }
+
+    #[test]
+    fn float64_hundredth_does_not_match_zero() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.01, 0.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "0.01 -> 0.0");
+    }
+
+    #[test]
+    fn float64_three_hundred_point_zero_one_does_not_match_three_hundred() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![300.01, 300.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "300.01 -> 300.0");
+    }
+
+    #[test]
+    fn float64_integer_valued_equals_match() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![300.0, 300.0])),
+        );
+        assert!(!result.has_differences);
+    }
+
+    #[test]
+    fn float64_off_by_one_does_not_match() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![301.0, 300.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "301.0 -> 300.0");
+    }
+
+    #[test]
+    fn float64_values_inside_one_tenth_do_not_match() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.76, 0.75])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "0.76 -> 0.75");
+    }
+
+    #[test]
+    fn float64_sum_does_not_match_rounded_decimal() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.3, 0.1 + 0.2])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "0.3 -> 0.30000000000000004");
+    }
+
+    #[test]
+    fn widened_float32_matches_same_f64_literal() {
+        // `cast(0.1 as float)` promoted next to `CAST(0.1 AS float8)` is the
+        // f32 value widened to f64, not the f64 literal. Those are the same
+        // number a unit test author wrote.
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.1, 0.1f32 as f64])),
+        );
+        assert!(!result.has_differences);
+    }
+
+    #[test]
+    fn widened_float32_hundredth_does_not_match_zero() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.0, 0.01f32 as f64])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "0.0 -> 0.009999999776482582");
+    }
+
+    #[test]
+    fn signed_zero_matches_zero() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![0.0, -0.0])),
+        );
+        assert!(!result.has_differences);
+    }
+
+    #[test]
+    fn nans_match() {
+        let result = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![
+                f64::NAN,
+                f64::from_bits(0x7ff8_0000_0000_0001),
+            ])),
+        );
+        assert!(!result.has_differences);
+    }
+
+    #[test]
+    fn infinities_match_only_with_the_same_sign() {
+        let same = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![f64::INFINITY, f64::INFINITY])),
+        );
+        assert!(!same.has_differences);
+
+        let opposite = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![f64::INFINITY, f64::NEG_INFINITY])),
+        );
+        assert!(opposite.has_differences);
+        assert_eq!(diff_value(&opposite), "inf -> -inf");
+    }
+
+    #[test]
+    fn float32_hundredth_does_not_match_zero() {
+        let result = compare_floats(
+            DataType::Float32,
+            Arc::new(Float32Array::from(vec![0.01, 0.0])),
+        );
+        assert!(result.has_differences);
+        assert_eq!(diff_value(&result), "0.01 -> 0.0");
+    }
+
+    #[test]
+    fn float32_equal_literals_match() {
+        let result = compare_floats(
+            DataType::Float32,
+            Arc::new(Float32Array::from(vec![0.1, 0.1])),
+        );
+        assert!(!result.has_differences);
+    }
+
+    #[test]
+    fn float64_nulls_match_and_null_differs_from_zero() {
+        let both_null = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![None, None])),
+        );
+        assert!(!both_null.has_differences);
+
+        let null_actual = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![Some(0.0), None])),
+        );
+        assert!(null_actual.has_differences);
+        assert_eq!(diff_value(&null_actual), "0.0 -> NULL");
     }
 }
 
