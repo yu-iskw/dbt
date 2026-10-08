@@ -390,7 +390,8 @@ async fn do_execute_fs(
             select: state_args.common_args.select.clone(),
             exclude: state_args.common_args.exclude.clone(),
             manage_state,
-            verbose: explain_args.verbose,
+            verbose: explain_args.verbose > 0,
+            very_verbose: explain_args.verbose > 1,
         })
         .await;
         return match result {

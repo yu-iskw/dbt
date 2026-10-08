@@ -56,7 +56,8 @@ use dbt_schemas::schemas::{
     DbtModel, DbtSeed, DbtSnapshot, DbtSource, DbtTest, InternalDbtNode, InternalDbtNodeAttributes,
 };
 use dbt_state::explain::{
-    StateExplainLogRecord, StateExplainNode, StateExplainNodeInfo, append_state_explain_log_record,
+    StateExplainExecutionConfirmed, StateExplainLogRecord, StateExplainNode, StateExplainNodeInfo,
+    append_state_explain_log_record,
 };
 use dbt_state::materialization;
 use dbt_state::metadata_cache::{MetadataPrefetchGuard, RunCacheMetadataCache};
@@ -1639,11 +1640,32 @@ fn write_state_explain_node(
         node_name: node.name(),
         node_info: state_explain_node_info(ctx, node),
         execution_decision_id,
+        execution_id: None,
     });
     if let Err(err) = append_state_explain_log_record(path, &record) {
         emit_warn_log_message(
             ErrorCode::StateServiceWarn,
             format!("Failed to write dbt State explain node record: {err}"),
+        );
+    }
+}
+
+fn write_state_explain_execution_confirmed(
+    ctx: &TaskRunnerCtx,
+    node: &dyn InternalDbtNodeAttributes,
+    execution_id: String,
+) {
+    let Some(path) = ctx.inner.run_cache_ctx.state_explain_log_path.as_ref() else {
+        return;
+    };
+    let record = StateExplainLogRecord::ExecutionConfirmed(StateExplainExecutionConfirmed {
+        node_unique_id: node.unique_id(),
+        execution_id,
+    });
+    if let Err(err) = append_state_explain_log_record(path, &record) {
+        emit_warn_log_message(
+            ErrorCode::StateServiceWarn,
+            format!("Failed to write dbt State explain execution record: {err}"),
         );
     }
 }
@@ -1837,33 +1859,46 @@ pub async fn confirm_run_cache_service_execution(
     };
 
     let request_id = request.request_id.clone();
-    if let Err(err) = client.confirm_execution(request).await {
-        let unique_id = node.unique_id();
-        match err {
-            RunCacheServiceError::Disabled => {}
-            err if err.is_transient_transport_rpc() => {
+    match client.confirm_execution(request).await {
+        Err(err) => {
+            let unique_id = node.unique_id();
+            match err {
+                RunCacheServiceError::Disabled => {}
+                err if err.is_transient_transport_rpc() => {
+                    emit_trace_log_message(|| {
+                        format!(
+                            "dbt State service confirmation transport failed for node {unique_id} (request_id {request_id}): {err}; command remains successful"
+                        )
+                    });
+                }
+                err => {
+                    emit_warn_log_message(
+                        ErrorCode::StateServiceWarn,
+                        format!(
+                            "dbt State service confirmation failed for node {unique_id} (request_id {request_id}): {err}; command remains successful"
+                        ),
+                    );
+                }
+            }
+        }
+        Ok(response) => {
+            let unique_id = node.unique_id();
+            if response.success {
                 emit_trace_log_message(|| {
                     format!(
-                        "dbt State service confirmation transport failed for node {unique_id} (request_id {request_id}): {err}; command remains successful"
+                        "dbt State service execution confirmed for node {unique_id} (request_id {request_id})"
+                    )
+                });
+                // The response request_id is the execution id, which differs from request_id for clones.
+                write_state_explain_execution_confirmed(ctx, node, response.request_id);
+            } else {
+                emit_trace_log_message(|| {
+                    format!(
+                        "dbt State service execution confirmation failed for node {unique_id} (request_id {request_id})"
                     )
                 });
             }
-            err => {
-                emit_warn_log_message(
-                    ErrorCode::StateServiceWarn,
-                    format!(
-                        "dbt State service confirmation failed for node {unique_id} (request_id {request_id}): {err}; command remains successful"
-                    ),
-                );
-            }
         }
-    } else {
-        let unique_id = node.unique_id();
-        emit_trace_log_message(|| {
-            format!(
-                "dbt State service execution confirmed for node {unique_id} (request_id {request_id})"
-            )
-        });
     }
 }
 
