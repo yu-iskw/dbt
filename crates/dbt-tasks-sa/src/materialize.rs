@@ -1820,7 +1820,7 @@ pub fn compare_record_batches(
                     let actual_val = value_as_string(col, *a, data_type);
                     let expected_val = value_as_string(col, *e, data_type);
 
-                    if actual_val == expected_val {
+                    if actual_val == expected_val || float_values_equal(col, *a, *e, data_type) {
                         expected_val
                     } else {
                         has_differences = true;
@@ -1873,6 +1873,55 @@ pub fn compare_record_batches(
     })
 }
 
+/// True when two float cells are the same number even if their formatted text differs.
+///
+/// A `FLOAT` value promoted beside a `float8` fixture is the f32 bits widened to
+/// f64. That widened value matches the f64 literal when the literal rounds back
+/// to the same f32 (`0.1` written in YAML vs `cast(0.1 as float)`). It does not
+/// match a nearby f64 that is not an exact f32 (`0.1 + 0.2` vs `0.3`).
+fn float_values_equal(
+    array: &ArrayRef,
+    actual_idx: usize,
+    expected_idx: usize,
+    data_type: &DataType,
+) -> bool {
+    if *data_type != DataType::Float64 {
+        return false;
+    }
+    let Some(arr) = array.as_any().downcast_ref::<Float64Array>() else {
+        return false;
+    };
+    if arr.is_null(actual_idx) || arr.is_null(expected_idx) {
+        return false;
+    }
+    let actual = arr.value(actual_idx);
+    let expected = arr.value(expected_idx);
+    if actual == expected || (actual.is_nan() && expected.is_nan()) {
+        return true;
+    }
+    let actual_as_f32 = actual as f32 as f64;
+    let expected_as_f32 = expected as f32 as f64;
+    (actual == actual_as_f32 && expected_as_f32 == actual)
+        || (expected == expected_as_f32 && actual_as_f32 == expected)
+}
+
+/// Shortest round-trip text. `{:.1}` made `0.01` and `0.0` compare equal.
+/// `-0.0` prints as `0.0` because IEEE and SQL treat them as equal.
+fn format_float<T>(value: T) -> String
+where
+    T: Copy + std::fmt::Debug,
+    f64: From<T>,
+{
+    let as_f64 = f64::from(value);
+    if as_f64.is_nan() {
+        "NaN".to_string()
+    } else if as_f64 == 0.0 {
+        "0.0".to_string()
+    } else {
+        format!("{value:?}")
+    }
+}
+
 fn value_as_string(array: &ArrayRef, index: usize, data_type: &DataType) -> String {
     match data_type {
         DataType::Int32 => {
@@ -1885,11 +1934,11 @@ fn value_as_string(array: &ArrayRef, index: usize, data_type: &DataType) -> Stri
         }
         DataType::Float32 => {
             let arr = array.as_any().downcast_ref::<Float32Array>().unwrap();
-            null_or!(arr, index, format!("{:.1}", arr.value(index)))
+            null_or!(arr, index, format_float(arr.value(index)))
         }
         DataType::Float64 => {
             let arr = array.as_any().downcast_ref::<Float64Array>().unwrap();
-            null_or!(arr, index, format!("{:.1}", arr.value(index)))
+            null_or!(arr, index, format_float(arr.value(index)))
         }
         DataType::Utf8 => {
             let arr = array.as_any().downcast_ref::<StringArray>().unwrap();
@@ -2160,11 +2209,17 @@ mod compare_record_batches_tests {
         // `cast(0.1 as float)` promoted next to `CAST(0.1 AS float8)` is the
         // f32 value widened to f64, not the f64 literal. Those are the same
         // number a unit test author wrote.
-        let result = compare_floats(
+        let positive = compare_floats(
             DataType::Float64,
             Arc::new(Float64Array::from(vec![0.1, 0.1f32 as f64])),
         );
-        assert!(!result.has_differences);
+        assert!(!positive.has_differences);
+
+        let negative = compare_floats(
+            DataType::Float64,
+            Arc::new(Float64Array::from(vec![-0.1, -0.1f32 as f64])),
+        );
+        assert!(!negative.has_differences);
     }
 
     #[test]
