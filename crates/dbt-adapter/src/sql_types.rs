@@ -1407,6 +1407,17 @@ mod tests {
     }
 
     #[test]
+    fn redshift_real_formats_as_real_not_float8() {
+        // REAL/FLOAT4 is binary32. Bare FLOAT and FLOAT8 are binary64, so a
+        // fixture cast of a Float32 column must say real.
+        assert_eq!(convert_type(&DataType::Float32, Redshift), "real");
+        assert_eq!(convert_type(&DataType::Float64, Redshift), "float8");
+        // Snowflake treats FLOAT, FLOAT4, and FLOAT8 as 64-bit.
+        assert_eq!(convert_type(&DataType::Float32, Snowflake), "float8");
+        assert_eq!(convert_type(&DataType::Float64, Snowflake), "float8");
+    }
+
+    #[test]
     fn test_convert_number_type() {
         let convert_floating_type = |adapter_type| convert_type(&DataType::Float64, adapter_type);
         assert_eq!(convert_floating_type(Bigquery), "float64");

@@ -4402,4 +4402,41 @@ mod tests {
         let result = strip_pseudocolumns(&schema, AdapterType::Snowflake);
         assert!(Arc::ptr_eq(&schema, &result));
     }
+
+    /// Fixture SQL for a nullable Float32 column holding the YAML literal 0.1.
+    fn float32_value_fixture_sql(adapter_type: AdapterType) -> String {
+        let type_ops = DefaultTypeOps::new(adapter_type);
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Float32,
+            true,
+        )]));
+        let rows = vec![BTreeMap::from([(
+            "value".to_string(),
+            YmlValue::number(0.1.into()),
+        )])];
+        create_values(
+            &schema,
+            &rows,
+            adapter_type,
+            &type_ops,
+            None,
+            "real_tenth",
+            false,
+        )
+        .expect("float32 fixture sql")
+    }
+
+    #[test]
+    fn redshift_real_fixture_casts_point_one_as_real() {
+        // A model `CAST(0.1 AS REAL)` and a fixture of the same decimal must
+        // share binary32. Casting the fixture as float8 widens it, and the
+        // unit-test UNION then compares 0.10000000149011612 with 0.1.
+        let sql = float32_value_fixture_sql(AdapterType::Redshift);
+        assert_contains!(sql, "CAST(0.1 AS real) AS value");
+        assert!(
+            !sql.to_ascii_lowercase().contains("float8"),
+            "redshift REAL fixture must not widen to float8: {sql}"
+        );
+    }
 }
