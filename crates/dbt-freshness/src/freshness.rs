@@ -1059,6 +1059,25 @@ fn create_relation_and_map(
     Ok(relation.into())
 }
 
+/// `filter` only ever reaches SQL built from `loaded_at_field`/`loaded_at_query`;
+/// the metadata-only ("last altered") check has no query to filter. Mirrors
+/// dbt-core's warning instead of silently dropping the config.
+fn uses_metadata_check_warn_if_filter_ignored(node: &dyn FreshnessNodeRef) -> bool {
+    let uses_metadata_check =
+        node.get_loaded_at_field().is_empty() && node.get_loaded_at_query().is_empty();
+    if uses_metadata_check && node.get_freshness_filter().is_some() {
+        emit_warn_log_message(
+            ErrorCode::FreshnessConfigInvalid,
+            format!(
+                "A filter cannot be applied to a metadata freshness check on {} '{}'",
+                node.kind_label().to_lowercase(),
+                node.common().unique_id
+            ),
+        );
+    }
+    uses_metadata_check
+}
+
 /// Return collection of relations and a map from relation FQN to node unique_ids.
 ///
 /// Multiple source nodes from different packages may point to the same physical
@@ -1078,9 +1097,7 @@ fn collect_relations(
     // Collect relations from sources
     let source_relations = sources
         .iter()
-        .filter(|node| {
-            node.get_loaded_at_field().is_empty() && node.get_loaded_at_query().is_empty()
-        })
+        .filter(|node| uses_metadata_check_warn_if_filter_ignored(**node))
         .map(|node| create_relation_and_map(*node, adapter_type, &mut name_map))
         .collect::<FsResult<Vec<_>>>()?;
 
@@ -1090,9 +1107,7 @@ fn collect_relations(
     // excluded, same as sources.
     let sla_model_relations = sla_models
         .iter()
-        .filter(|node| {
-            node.get_loaded_at_field().is_empty() && node.get_loaded_at_query().is_empty()
-        })
+        .filter(|node| uses_metadata_check_warn_if_filter_ignored(**node))
         .map(|node| create_relation_and_map(*node, adapter_type, &mut name_map))
         .collect::<FsResult<Vec<_>>>()?;
 
