@@ -593,7 +593,10 @@ mod tests {
             .downcast_object::<crate::response::AdapterResponse>()
             .unwrap();
         assert_eq!(response.message(), original.message());
-        assert_eq!(response.rows_affected(), original.rows_affected());
+        assert_eq!(
+            response.known_rows_affected(),
+            original.known_rows_affected()
+        );
     }
 
     #[test]
