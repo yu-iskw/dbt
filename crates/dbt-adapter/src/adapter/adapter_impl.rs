@@ -1907,8 +1907,10 @@ impl AdapterImpl {
         fn duckdb_is_motherduck(config: &AdapterConfig) -> bool {
             matches!(
                 dbt_auth::DuckDbTarget::from_config(config),
-                Ok(dbt_auth::DuckDbTarget::MotherDuck { .. })
-                    | Ok(dbt_auth::DuckDbTarget::MotherDuckWithToken { .. })
+                Ok(dbt_auth::DuckDbTarget::MotherduckBrowserLogin { .. })
+                    | Ok(dbt_auth::DuckDbTarget::MotherduckTokenAuth { .. })
+                    | Ok(dbt_auth::DuckDbTarget::MotherduckSaasBrowserLogin { .. })
+                    | Ok(dbt_auth::DuckDbTarget::MotherduckSaasTokenAuth { .. })
             )
         }
 
@@ -3557,7 +3559,6 @@ impl AdapterImpl {
         }
     }
 
-    /// BigQueryAdapter https://github.com/dbt-labs/dbt-adapters/blob/0efd8d3d1081e1ab43e38797d5104f7b424a6284/dbt-bigquery/src/dbt/adapters/bigquery/impl.py#L930
     #[allow(clippy::too_many_arguments)]
     pub fn load_dataframe(
         &self,
@@ -3574,6 +3575,7 @@ impl AdapterImpl {
         token: CancellationToken,
     ) -> AdapterResult<Value> {
         match self.adapter_type() {
+            // BigQueryAdapter https://github.com/dbt-labs/dbt-adapters/blob/0efd8d3d1081e1ab43e38797d5104f7b424a6284/dbt-bigquery/src/dbt/adapters/bigquery/impl.py#L930
             Bigquery => {
                 // https://github.com/dbt-labs/dbt-adapters/blob/4b3966efc50b1d013907a88bee4ab8ebd022d17a/dbt-bigquery/src/dbt/adapters/bigquery/impl.py#L668
                 //
@@ -3625,11 +3627,79 @@ impl AdapterImpl {
 
                 Ok(none_value())
             }
+            DuckDB => {
+                // DuckDB cannot access local files when `motherduck_saas_mode`
+                // is enabled. In that case, we need to load the dataset in
+                // memory and bulk-ingest it into the motherduck instance
+                // manually.
+
+                if self.engine().is_mock() {
+                    return Ok(none_value());
+                }
+
+                if self.engine().is_replay() {
+                    crate::engine::duckdb_seed::copy_seed_csv(
+                        conn,
+                        database,
+                        schema,
+                        table_name,
+                        file_path,
+                        field_delimiter,
+                    )?;
+                    return Ok(none_value());
+                }
+
+                let saas_mode_enabled = matches!(
+                    dbt_auth::DuckDbTarget::from_config(self.engine().get_config()),
+                    Ok(dbt_auth::DuckDbTarget::MotherduckSaasBrowserLogin { .. })
+                        | Ok(dbt_auth::DuckDbTarget::MotherduckSaasTokenAuth { .. })
+                );
+                #[cfg(debug_assertions)]
+                {
+                    let (_, saas_mode_table) = self.query(
+                        ctx,
+                        conn,
+                        dbt_auth::motherduck_saas_mode_query(),
+                        None,
+                        token,
+                    )?;
+                    let live_saas_mode = saas_mode_table
+                        .original_record_batch()
+                        .column_values::<BooleanArray>("saas_mode")?
+                        .value(0);
+                    debug_assert_eq!(
+                        live_saas_mode, saas_mode_enabled,
+                        "live motherduck_saas_mode disagrees with the profile config"
+                    );
+                }
+
+                if saas_mode_enabled {
+                    crate::engine::duckdb_seed::ingest_seed_csv(
+                        ctx,
+                        conn,
+                        database,
+                        schema,
+                        table_name,
+                        file_path,
+                        field_delimiter,
+                    )?;
+                } else {
+                    crate::engine::duckdb_seed::copy_seed_csv(
+                        conn,
+                        database,
+                        schema,
+                        table_name,
+                        file_path,
+                        field_delimiter,
+                    )?;
+                }
+
+                Ok(none_value())
+            }
             Salesforce => todo!("load_dataframe() for the Salesforce adapter"),
-            Postgres | Snowflake | Databricks | Redshift | Spark | DuckDB | LakeCompute
-            | Fabric | ClickHouse | Exasol | Starburst | Athena | Trino | Datafusion | Dremio
-            | Oracle => {
-                unimplemented!("only available with BigQuery or Salesforce adapter")
+            Postgres | Snowflake | Databricks | Redshift | Spark | LakeCompute | Fabric
+            | ClickHouse | Exasol | Starburst | Athena | Trino | Datafusion | Dremio | Oracle => {
+                unimplemented!("only available with BigQuery, DuckDB or Salesforce adapter")
             }
         }
     }

@@ -1144,6 +1144,32 @@ pub fn register_global_runtime_config(package_name: String, cfg: Arc<DbtRuntimeC
     map.insert(package_name, cfg);
 }
 
+/// Canonical absolute `seed-paths` of every registered package (the root project
+/// included), each prefixed with that package's project root. Directories that
+/// don't exist are skipped.
+pub fn canonical_seed_dirs() -> Vec<String> {
+    let Some(configs) = snapshot_global_runtime_configs() else {
+        return Vec::new();
+    };
+    let mut dirs: Vec<String> = configs
+        .values()
+        .flat_map(|config| {
+            let inner = &config.inner;
+            inner
+                .seed_paths
+                .iter()
+                .filter_map(|path| {
+                    dbt_common::stdfs::canonicalize(inner.project_root.join(path)).ok()
+                })
+                .filter_map(|dir| dir.to_str().map(str::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
 fn snapshot_global_runtime_configs() -> Option<RuntimeConfigMap> {
     let map = global_runtime_configs().read().ok()?;
     if map.is_empty() {
