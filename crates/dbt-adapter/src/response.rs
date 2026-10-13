@@ -2,6 +2,7 @@ use arrow_array::RecordBatch;
 use dbt_adapter_core::AdapterType;
 use dbt_adbc as adbc;
 use dbt_agate::AgateTable;
+use dbt_common::stats::ExecutionMetrics;
 use minijinja::listener::RenderingEventListener;
 use minijinja::value::{Enumerator, Object, ValueMap};
 use minijinja::{State, Value};
@@ -112,6 +113,30 @@ impl AdapterResponse {
     /// Rows affected, or `None` when absent or the `-1` unknown sentinel.
     pub fn known_rows_affected(&self) -> Option<i64> {
         self.get_i64(KEY_ROWS_AFFECTED).filter(|rows| *rows >= 0)
+    }
+
+    /// BigQuery bytes processed; `None` for other adapters.
+    pub fn bytes_processed(&self) -> Option<i64> {
+        self.get_i64(KEY_BYTES_PROCESSED)
+    }
+
+    /// BigQuery bytes billed; `None` for other adapters.
+    pub fn bytes_billed(&self) -> Option<i64> {
+        self.get_i64(KEY_BYTES_BILLED)
+    }
+
+    /// BigQuery slot milliseconds; `None` for other adapters.
+    pub fn slot_ms(&self) -> Option<i64> {
+        self.get_i64(KEY_SLOT_MS)
+    }
+
+    pub fn execution_metrics(&self) -> ExecutionMetrics {
+        ExecutionMetrics {
+            rows_affected: self.known_rows_affected(),
+            bytes_processed: self.bytes_processed(),
+            bytes_billed: self.bytes_billed(),
+            slot_ms: self.slot_ms(),
+        }
     }
 
     /// Build the response for an executed statement from its result batch.
@@ -620,6 +645,7 @@ mod from_record_batch_tests {
         let response = bigquery(1, &[]);
         assert_eq!(response.message(), "SUCCESS (1.0 rows)");
         assert_eq!(response.code(), "SUCCESS");
+        assert_eq!(response.bytes_processed(), None);
         assert_eq!(json(&response).get("bytes_processed"), None);
     }
 
@@ -639,6 +665,9 @@ mod from_record_batch_tests {
         assert_eq!(response.message(), "SELECT (2.0 rows, 1.5 KiB processed)");
         assert_eq!(response.code(), "SELECT");
         assert_eq!(response.known_rows_affected(), Some(2));
+        assert_eq!(response.bytes_processed(), Some(1536));
+        assert_eq!(response.bytes_billed(), Some(10485760));
+        assert_eq!(response.slot_ms(), Some(7167));
 
         let json = json(&response);
         assert_eq!(json["bytes_processed"], 1536);
@@ -732,6 +761,9 @@ mod from_record_batch_tests {
             AdapterResponse::from_record_batch(&select_batch(1, &metadata), AdapterType::Snowflake);
         assert_eq!(response.message(), "SUCCESS 1");
         assert_eq!(json(&response).get("slot_ms"), None);
+        assert_eq!(response.bytes_processed(), None);
+        assert_eq!(response.bytes_billed(), None);
+        assert_eq!(response.slot_ms(), None);
     }
 
     #[test]
