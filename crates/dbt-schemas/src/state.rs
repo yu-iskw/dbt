@@ -917,7 +917,7 @@ pub fn hydrate_user_defined_schema_registry(
             ),
         };
         let relation =
-            datafusion_common::TableReference::full(database, schema, alias).to_quoted_string();
+            dbt_common::user_defined_schema_registry::relation_key(&database, &schema, &alias);
         for column in &base.columns {
             let name = match adapter_type {
                 AdapterType::Snowflake => column.name.to_uppercase(),
@@ -1763,8 +1763,7 @@ mod user_defined_schema_registry_tests {
             ..Default::default()
         };
         let registry = hydrate_user_defined_schema_registry(&nodes, AdapterType::Snowflake);
-        let relation =
-            datafusion_common::TableReference::full("DB", "SCH", "TBL").to_quoted_string();
+        let relation = dbt_common::user_defined_schema_registry::relation_key("DB", "SCH", "TBL");
         assert!(registry.columns_for(&relation).unwrap().contains("COL"));
     }
 
@@ -1780,8 +1779,7 @@ mod user_defined_schema_registry_tests {
             ..Default::default()
         };
         let registry = hydrate_user_defined_schema_registry(&nodes, AdapterType::DuckDB);
-        let relation =
-            datafusion_common::TableReference::full("db", "sch", "tbl").to_quoted_string();
+        let relation = dbt_common::user_defined_schema_registry::relation_key("db", "sch", "tbl");
         assert!(registry.columns_for(&relation).unwrap().contains("col"));
     }
 
@@ -1797,8 +1795,7 @@ mod user_defined_schema_registry_tests {
             ..Default::default()
         };
         let registry = hydrate_user_defined_schema_registry(&nodes, AdapterType::Snowflake);
-        let relation =
-            datafusion_common::TableReference::full("DB", "SCH", "TBL").to_quoted_string();
+        let relation = dbt_common::user_defined_schema_registry::relation_key("DB", "SCH", "TBL");
         assert!(registry.columns_for(&relation).is_none());
     }
 
@@ -1852,7 +1849,7 @@ mod user_defined_schema_registry_tests {
         let registry = hydrate_user_defined_schema_registry(&nodes, AdapterType::DuckDB);
 
         let source_relation =
-            datafusion_common::TableReference::full("db", "sch", "src_tbl").to_quoted_string();
+            dbt_common::user_defined_schema_registry::relation_key("db", "sch", "src_tbl");
         assert!(
             registry
                 .columns_for(&source_relation)
@@ -1861,7 +1858,7 @@ mod user_defined_schema_registry_tests {
         );
 
         let seed_relation =
-            datafusion_common::TableReference::full("db", "sch", "seed_tbl").to_quoted_string();
+            dbt_common::user_defined_schema_registry::relation_key("db", "sch", "seed_tbl");
         assert!(
             registry
                 .columns_for(&seed_relation)
@@ -1870,7 +1867,7 @@ mod user_defined_schema_registry_tests {
         );
 
         let snapshot_relation =
-            datafusion_common::TableReference::full("db", "sch", "snap_tbl").to_quoted_string();
+            dbt_common::user_defined_schema_registry::relation_key("db", "sch", "snap_tbl");
         assert!(
             registry
                 .columns_for(&snapshot_relation)
