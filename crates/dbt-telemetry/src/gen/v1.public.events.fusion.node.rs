@@ -511,6 +511,10 @@ pub struct NodeProcessed {
     /// Mirrors dbt core's `num_nodes`.
     #[prost(uint32, optional, tag = "47")]
     pub node_count_total: ::core::option::Option<u32>,
+    /// Adapter type this node runs on (e.g. "snowflake"). Only set when the
+    /// project can run nodes on more than one adapter.
+    #[prost(string, optional, tag = "48")]
+    pub adapter: ::core::option::Option<::prost::alloc::string::String>,
     /// Node type specific details (e.g. test fail counts, cache use reasons).
     #[prost(oneof = "node_processed::NodeOutcomeDetail", tags = "30, 31, 32, 33, 34")]
     pub node_outcome_detail: ::core::option::Option<node_processed::NodeOutcomeDetail>,

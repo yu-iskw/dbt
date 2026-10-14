@@ -465,4 +465,8 @@ message NodeProcessed {
   // Total number of nodes in the selection set, the denominator of `node_index`.
   // Mirrors dbt core's `num_nodes`.
   optional uint32 node_count_total = 47;
+
+  // Adapter type this node runs on (e.g. "snowflake"). Only set when the
+  // project can run nodes on more than one adapter.
+  optional string adapter = 48;
 }

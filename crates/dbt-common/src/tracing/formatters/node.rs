@@ -97,8 +97,12 @@ pub fn format_node_type_fixed_width(node_type: &str, colorize: bool) -> String {
     }
 }
 
-/// Format materialization without fixed width (for end of line)
-pub fn format_materialization_suffix(materialization: Option<&str>, desc: Option<&str>) -> String {
+/// Format materialization and adapter without fixed width (for end of line)
+pub fn format_materialization_suffix(
+    materialization: Option<&str>,
+    adapter: Option<&str>,
+    desc: Option<&str>,
+) -> String {
     let truncated_mat = match materialization {
         Some("materialized_view") => Some("mat_view"),
         Some("streaming_table") => Some("streaming"),
@@ -106,9 +110,15 @@ pub fn format_materialization_suffix(materialization: Option<&str>, desc: Option
         Some("test") | Some("unit_test") | Some("unit") | None => None,
         Some(other) => Some(other),
     };
-    match (truncated_mat, desc) {
-        (Some(mat), Some(desc)) => format!(" ({mat} - {desc})"),
-        (Some(mat), None) => format!(" ({mat})"),
+    let label = match (truncated_mat, adapter) {
+        (Some(mat), Some(adapter)) => Some(format!("{mat}, {adapter}")),
+        (Some(mat), None) => Some(mat.to_string()),
+        (None, Some(adapter)) => Some(adapter.to_string()),
+        (None, None) => None,
+    };
+    match (label, desc) {
+        (Some(label), Some(desc)) => format!(" ({label} - {desc})"),
+        (Some(label), None) => format!(" ({label})"),
         (None, Some(desc)) => format!(" ({desc})"),
         (None, None) => String::new(),
     }
@@ -473,8 +483,11 @@ pub fn format_node_processed_end(
     // Format components
     let qualifier_alias = format_qualifier_alias(&qualifier, &alias, colorize);
     let node_type_formatted = format_node_type_fixed_width(node_type.as_static_ref(), colorize);
-    let materialization_suffix =
-        format_materialization_suffix(materialization_str.as_deref(), desc.as_deref());
+    let materialization_suffix = format_materialization_suffix(
+        materialization_str.as_deref(),
+        node.adapter.as_deref(),
+        desc.as_deref(),
+    );
     let progress_formatted = format_progress_field(node.node_index, node.node_count_total, elapsed);
     let action_formatted = format_node_action(
         node_outcome,
@@ -778,6 +791,7 @@ pub fn format_aggregated_test_group_header(
     worst_outcome: TestOutcome,
     duration: std::time::Duration,
     node_count_total: Option<u32>,
+    adapter: Option<&str>,
     colorize: bool,
 ) -> String {
     // unique_id is `<type>.<package>.<name>[.v<version>]`; keep the version suffix.
@@ -807,7 +821,7 @@ pub fn format_aggregated_test_group_header(
             action_formatted,
             format_node_type_fixed_width(NodeType::Test.as_static_ref(), colorize),
             format_qualifier_alias("", &label, colorize),
-            format_materialization_suffix(None, Some(&format!("{member_count} batched")))
+            format_materialization_suffix(None, adapter, Some(&format!("{member_count} batched")))
         ),
         duration_formatted,
     )
@@ -845,7 +859,7 @@ pub fn format_aggregated_test_group_member(
         maybe_apply_color(action_style, action_label, colorize),
         format_node_type_fixed_width(node.node_type().as_static_ref(), colorize),
         format_qualifier_alias("", &node.name, colorize),
-        format_materialization_suffix(None, desc.as_deref())
+        format_materialization_suffix(None, node.adapter.as_deref(), desc.as_deref())
     )
 }
 
@@ -1241,6 +1255,84 @@ mod tests {
         assert!(!output.contains("Batched"));
     }
 
+    fn model_processed(adapter: Option<&str>) -> NodeProcessed {
+        let mut node = NodeProcessed::start(
+            "model.project.customers".to_string(),
+            "customers".to_string(),
+            None,
+            Some("analytics".to_string()),
+            Some("customers".to_string()),
+            Some(NodeMaterialization::Table),
+            None,
+            NodeType::Model,
+            Some(ExecutionPhase::Run),
+            "models/customers.sql".to_string(),
+            None,
+            None,
+            "checksum".to_string(),
+            true,
+            None,
+        );
+        node.adapter = adapter.map(str::to_string);
+        node.set_node_outcome(NodeOutcome::Success);
+        node
+    }
+
+    #[test]
+    fn adapter_renders_alongside_materialization() {
+        let output = format_node_processed_end(
+            &model_processed(Some("snowflake")),
+            std::time::Duration::from_millis(250),
+            false,
+        );
+
+        assert!(
+            output.contains("analytics.customers (table, snowflake)"),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn missing_adapter_keeps_materialization_alone() {
+        let output = format_node_processed_end(
+            &model_processed(None),
+            std::time::Duration::from_millis(250),
+            false,
+        );
+
+        assert!(output.contains("analytics.customers (table) "), "{output}");
+    }
+
+    #[test]
+    fn adapter_renders_for_tests_without_materialization() {
+        let mut node = test_processed(TestOutcome::Passed, 0, None, None);
+        node.adapter = Some("snowflake".to_string());
+
+        let output = format_node_processed_end(&node, std::time::Duration::from_millis(250), false);
+
+        assert!(
+            output.contains("accepted_values_orders_is_today_order__True (snowflake) "),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn materialization_suffix_places_adapter_before_description() {
+        assert_eq!(
+            format_materialization_suffix(Some("table"), Some("snowflake"), Some("cached")),
+            " (table, snowflake - cached)"
+        );
+        assert_eq!(
+            format_materialization_suffix(None, Some("snowflake"), Some("cached")),
+            " (snowflake - cached)"
+        );
+        assert_eq!(
+            format_materialization_suffix(Some("table"), None, Some("cached")),
+            " (table - cached)"
+        );
+        assert_eq!(format_materialization_suffix(None, None, None), "");
+    }
+
     fn indexed_test_processed(index: Option<u32>, total: Option<u32>) -> NodeProcessed {
         let mut node = test_processed(TestOutcome::Passed, 0, None, None);
         node.node_index = index;
@@ -1355,6 +1447,7 @@ mod tests {
             TestOutcome::Passed,
             std::time::Duration::from_millis(340),
             Some(53),
+            None,
             false,
         );
         let indexed = format_node_processed_end(
@@ -1377,6 +1470,7 @@ mod tests {
             TestOutcome::Failed,
             std::time::Duration::from_millis(250),
             None,
+            None,
             false,
         );
 
@@ -1394,6 +1488,7 @@ mod tests {
             TestOutcome::Passed,
             std::time::Duration::from_millis(250),
             None,
+            None,
             false,
         );
 
@@ -1409,6 +1504,7 @@ mod tests {
             2,
             TestOutcome::Passed,
             std::time::Duration::from_millis(250),
+            None,
             None,
             false,
         );
@@ -1426,10 +1522,37 @@ mod tests {
             TestOutcome::Warned,
             std::time::Duration::from_millis(250),
             None,
+            None,
             false,
         );
 
         assert!(output.contains("Warned"));
+    }
+
+    #[test]
+    fn aggregated_group_header_shows_adapter() {
+        let output = format_aggregated_test_group_header(
+            "unique",
+            "model.my_pkg.unproven_unique",
+            2,
+            TestOutcome::Passed,
+            std::time::Duration::from_millis(250),
+            None,
+            Some("snowflake"),
+            false,
+        );
+
+        assert!(output.contains("(snowflake - 2 batched)"), "{output}");
+    }
+
+    #[test]
+    fn aggregated_group_member_shows_adapter() {
+        let mut node = test_processed(TestOutcome::Passed, 0, None, Some(BATCH_UNIQUE_ID));
+        node.adapter = Some("snowflake".to_string());
+
+        let output = format_aggregated_test_group_member(&node, false, false);
+
+        assert!(output.ends_with("(snowflake)"), "{output}");
     }
 
     #[test]
@@ -1480,6 +1603,7 @@ mod tests {
             2,
             TestOutcome::Failed,
             std::time::Duration::from_millis(250),
+            None,
             None,
             false,
         );

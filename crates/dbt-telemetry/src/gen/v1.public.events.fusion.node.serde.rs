@@ -1705,6 +1705,9 @@ impl serde::Serialize for NodeProcessed {
         if self.node_count_total.is_some() {
             len += 1;
         }
+        if self.adapter.is_some() {
+            len += 1;
+        }
         if self.node_outcome_detail.is_some() {
             len += 1;
         }
@@ -1810,6 +1813,9 @@ impl serde::Serialize for NodeProcessed {
         if let Some(v) = self.node_count_total.as_ref() {
             struct_ser.serialize_field("node_count_total", v)?;
         }
+        if let Some(v) = self.adapter.as_ref() {
+            struct_ser.serialize_field("adapter", v)?;
+        }
         if let Some(v) = self.node_outcome_detail.as_ref() {
             match v {
                 node_processed::NodeOutcomeDetail::NodeCacheDetail(v) => {
@@ -1887,6 +1893,7 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
             "nodeIndex",
             "node_count_total",
             "nodeCountTotal",
+            "adapter",
             "node_cache_detail",
             "nodeCacheDetail",
             "node_test_detail",
@@ -1928,6 +1935,7 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
             IdleTimeMs,
             NodeIndex,
             NodeCountTotal,
+            Adapter,
             NodeCacheDetail,
             NodeTestDetail,
             NodeFreshnessOutcome,
@@ -1982,6 +1990,7 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
                             "idleTimeMs" | "idle_time_ms" => Ok(GeneratedField::IdleTimeMs),
                             "nodeIndex" | "node_index" => Ok(GeneratedField::NodeIndex),
                             "nodeCountTotal" | "node_count_total" => Ok(GeneratedField::NodeCountTotal),
+                            "adapter" => Ok(GeneratedField::Adapter),
                             "nodeCacheDetail" | "node_cache_detail" => Ok(GeneratedField::NodeCacheDetail),
                             "nodeTestDetail" | "node_test_detail" => Ok(GeneratedField::NodeTestDetail),
                             "nodeFreshnessOutcome" | "node_freshness_outcome" => Ok(GeneratedField::NodeFreshnessOutcome),
@@ -2033,6 +2042,7 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
                 let mut idle_time_ms__ = None;
                 let mut node_index__ = None;
                 let mut node_count_total__ = None;
+                let mut adapter__ = None;
                 let mut node_outcome_detail__ = None;
                 while let Some(k) = map_.next_key()? {
                     match k {
@@ -2212,6 +2222,12 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
                                 map_.next_value::<::std::option::Option<::pbjson::private::NumberDeserialize<_>>>()?.map(|x| x.0)
                             ;
                         }
+                        GeneratedField::Adapter => {
+                            if adapter__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("adapter"));
+                            }
+                            adapter__ = map_.next_value()?;
+                        }
                         GeneratedField::NodeCacheDetail => {
                             if node_outcome_detail__.is_some() {
                                 return Err(serde::de::Error::duplicate_field("nodeCacheDetail"));
@@ -2280,6 +2296,7 @@ impl<'de> serde::Deserialize<'de> for NodeProcessed {
                     idle_time_ms: idle_time_ms__,
                     node_index: node_index__,
                     node_count_total: node_count_total__,
+                    adapter: adapter__,
                     node_outcome_detail: node_outcome_detail__,
                 })
             }
