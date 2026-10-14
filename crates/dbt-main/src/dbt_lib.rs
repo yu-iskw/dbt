@@ -644,7 +644,7 @@ fn emit_version_info(eval_arg: &EvalArgs, command_name: &str) -> FsResult<()> {
             let git_hash = git_version!(fallback = "unknown");
             let build_time = format!(
                 "{} ({} {})",
-                env!("CARGO_PKG_VERSION"),
+                option_env!("DBT_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
                 git_hash,
                 formatted_time
             );
@@ -657,7 +657,7 @@ fn emit_version_info(eval_arg: &EvalArgs, command_name: &str) -> FsResult<()> {
     }
 
     // Show version (always shown in release builds, or in debug builds when not from_main)
-    let current_version = env!("CARGO_PKG_VERSION");
+    let current_version = option_env!("DBT_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     emit_info_progress_message(ProgressMessage::new_from_action_and_target(
         command_name.to_string(),
         current_version.to_string(),
