@@ -1372,8 +1372,18 @@ impl<'a> AllPhasesExecutor<'a> {
                     let outcome = {
                         let metadata_dir = self.arg.metadata_dir();
                         let scope = scope.clone();
+                        let row_limit = self.arg.limit;
+                        // `--limit` is only advertised where it works: `build` ignores it and
+                        // `retry` does not take it.
+                        let hint_limit = self.arg.command == FsCommand::Check && !retrying;
                         dbt_runtime::spawn_blocking(move || {
-                            run_parse_time_checks(&named, &metadata_dir, scope.as_ref(), 5)
+                            run_parse_time_checks(
+                                &named,
+                                &metadata_dir,
+                                scope.as_ref(),
+                                row_limit,
+                                hint_limit,
+                            )
                         })
                         .await
                         .map_err(|e| {
