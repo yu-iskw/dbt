@@ -68,6 +68,7 @@ members = [
   "crates/dbt-main",
   "crates/dbt-dist",
   "crates/dbt-dist-classify",
+  "crates/dbt-sa-adapter-tests",
   "crates/dbt-sa-cli",
   "crates/dbt-adbc",
   "crates/dbt-artifact-download",

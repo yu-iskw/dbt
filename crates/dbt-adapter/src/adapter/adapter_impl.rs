@@ -3930,7 +3930,20 @@ impl AdapterImpl {
     pub fn verify_database(&self, database: String) -> AdapterResult<Value> {
         match self.inner_adapter() {
             Replay(_, replay) => replay.replay_verify_database(&database),
-            Impl(adapter_type @ (Postgres | DuckDB | LakeCompute | ClickHouse), engine) => {
+            Impl(ClickHouse, _) => {
+                if database.is_empty() {
+                    Ok(Value::from(()))
+                } else {
+                    Err(AdapterError::new(
+                        AdapterErrorKind::UnexpectedDbReference,
+                        format!(
+                            "Cross-db references not allowed in the {} adapter ({} vs )",
+                            ClickHouse, database
+                        ),
+                    ))
+                }
+            }
+            Impl(adapter_type @ (Postgres | DuckDB | LakeCompute), engine) => {
                 if let Some(configured_database) = engine.get_configured_database_name() {
                     if database == configured_database {
                         Ok(Value::from(()))
