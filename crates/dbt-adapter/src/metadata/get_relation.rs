@@ -941,18 +941,23 @@ fn duckdb_get_relation(
 
     if !schema.is_empty()
         && !identifier.is_empty()
-        && crate::metadata::duckdb::is_duckdb_external_iceberg_catalog_database(database)
+        && crate::metadata::duckdb::skips_schema_wide_listing(adapter.adapter_type(), database)
     {
         // DuckDB's information_schema can omit or misreport Iceberg REST
         // attached-catalog tables. A targeted DESCRIBE is the narrow fallback:
         // it reuses the normal relation construction after proving the table
         // exists, without enabling broad schema listing for these catalogs.
         let quote = |id: &str| dbt_adapter_sql::ident::quote_identifier(id, AdapterType::DuckDB);
+        let (probe_schema, probe_identifier) = crate::metadata::duckdb::probe_relation_parts(
+            adapter.adapter_type(),
+            (schema, identifier),
+            (query_schema.as_str(), query_identifier.as_str()),
+        );
         let relation_name = format!(
             "{}.{}.{}",
             quote(database),
-            quote(&query_schema),
-            quote(&query_identifier),
+            quote(probe_schema),
+            quote(probe_identifier),
         );
         let sql = format!("DESCRIBE {relation_name}");
         let result = adapter
@@ -971,7 +976,13 @@ fn duckdb_get_relation(
                 )?;
                 return Ok(Some(relation));
             }
-            Err(err) if crate::metadata::duckdb::is_missing_relation_error(&err) => {
+            Err(err)
+                if crate::metadata::duckdb::is_probe_missing_relation_error(
+                    adapter.adapter_type(),
+                    &err,
+                    database,
+                ) =>
+            {
                 return Ok(None);
             }
             Err(err) => return Err(err),
