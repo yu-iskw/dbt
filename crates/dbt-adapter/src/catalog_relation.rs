@@ -1784,58 +1784,70 @@ impl CatalogRelation {
     ) -> AdapterResult<CatalogRelation> {
         let bigquery = require_platform_block(catalog, catalog_name, "bigquery")?;
 
-        let external_volume = Self::get_model_config_value(
-            model,
-            FIELD_EXTERNAL_VOLUME,
-            AdapterType::Bigquery,
-        )
-        .or_else(|| get_yaml_str(bigquery, FIELD_EXTERNAL_VOLUME).map(|s| s.to_string()))
-        .ok_or_else(|| {
-            AdapterError::new(
-                AdapterErrorKind::Configuration,
-                format!(
-                    "Catalog '{catalog_name}' biglake_metastore/bigquery requires external_volume"
-                ),
-            )
-        })?;
-        if external_volume.trim().is_empty() {
-            return Err(AdapterError::new(
-                AdapterErrorKind::Configuration,
-                format!(
-                    "Catalog '{catalog_name}' biglake_metastore/bigquery external_volume cannot be blank"
-                ),
-            ));
-        }
-        if !external_volume.starts_with("gs://") {
-            return Err(AdapterError::new(
-                AdapterErrorKind::Configuration,
-                format!(
-                    "Catalog '{catalog_name}' biglake_metastore/bigquery external_volume must start with gs://"
-                ),
-            ));
-        }
+        let lakehouse_catalog =
+            get_yaml_str(bigquery, FIELD_LAKEHOUSE_CATALOG).map(|s| s.to_string());
+        let is_lrc = lakehouse_catalog.is_some();
 
-        let mut file_format = Self::get_model_config_value(
-            model,
-            FIELD_FILE_FORMAT,
-            AdapterType::Bigquery,
-        )
-        .or_else(|| get_yaml_str(bigquery, FIELD_FILE_FORMAT).map(|s| s.to_string()))
-        .ok_or_else(|| {
-            AdapterError::new(
-                AdapterErrorKind::Configuration,
-                format!("Catalog '{catalog_name}' biglake_metastore/bigquery requires file_format"),
-            )
-        })?;
-        file_format.make_ascii_lowercase();
-        if !file_format.eq_ignore_ascii_case("parquet") {
-            return Err(AdapterError::new(
-                AdapterErrorKind::Configuration,
-                format!(
-                    "Catalog '{catalog_name}' biglake_metastore/bigquery file_format must be parquet"
-                ),
-            ));
-        }
+        let external_volume =
+            Self::get_model_config_value(model, FIELD_EXTERNAL_VOLUME, AdapterType::Bigquery)
+                .or_else(|| get_yaml_str(bigquery, FIELD_EXTERNAL_VOLUME).map(|s| s.to_string()));
+        let external_volume = match external_volume {
+            Some(external_volume) => {
+                if external_volume.trim().is_empty() {
+                    return Err(AdapterError::new(
+                        AdapterErrorKind::Configuration,
+                        format!(
+                            "Catalog '{catalog_name}' biglake_metastore/bigquery external_volume cannot be blank"
+                        ),
+                    ));
+                }
+                if !external_volume.starts_with("gs://") {
+                    return Err(AdapterError::new(
+                        AdapterErrorKind::Configuration,
+                        format!(
+                            "Catalog '{catalog_name}' biglake_metastore/bigquery external_volume must start with gs://"
+                        ),
+                    ));
+                }
+                Some(external_volume)
+            }
+            None if is_lrc => None,
+            None => {
+                return Err(AdapterError::new(
+                    AdapterErrorKind::Configuration,
+                    format!(
+                        "Catalog '{catalog_name}' biglake_metastore/bigquery requires external_volume"
+                    ),
+                ));
+            }
+        };
+
+        let file_format =
+            Self::get_model_config_value(model, FIELD_FILE_FORMAT, AdapterType::Bigquery)
+                .or_else(|| get_yaml_str(bigquery, FIELD_FILE_FORMAT).map(|s| s.to_string()));
+        let file_format = match file_format {
+            Some(mut file_format) => {
+                file_format.make_ascii_lowercase();
+                if !file_format.eq_ignore_ascii_case("parquet") {
+                    return Err(AdapterError::new(
+                        AdapterErrorKind::Configuration,
+                        format!(
+                            "Catalog '{catalog_name}' biglake_metastore/bigquery file_format must be parquet"
+                        ),
+                    ));
+                }
+                Some(file_format)
+            }
+            None if is_lrc => None,
+            None => {
+                return Err(AdapterError::new(
+                    AdapterErrorKind::Configuration,
+                    format!(
+                        "Catalog '{catalog_name}' biglake_metastore/bigquery requires file_format"
+                    ),
+                ));
+            }
+        };
 
         let base_location_root =
             Self::get_model_config_value(model, FIELD_BASE_LOCATION_ROOT, AdapterType::Bigquery)
@@ -1867,21 +1879,29 @@ impl CatalogRelation {
             Self::get_model_config_value(model, FIELD_CONNECTION_ID, AdapterType::Bigquery)
                 .or_else(|| get_yaml_str(bigquery, FIELD_CONNECTION_ID).map(|s| s.to_string()));
 
-        let storage_uri =
-            Self::get_model_config_value(model, FIELD_STORAGE_URI, AdapterType::Bigquery)
-                .unwrap_or_else(|| format!("{external_volume}/{base_location}"));
+        let storage_uri = if is_lrc {
+            None
+        } else {
+            Self::get_model_config_value(model, FIELD_STORAGE_URI, AdapterType::Bigquery).or_else(
+                || {
+                    external_volume
+                        .as_deref()
+                        .map(|v| format!("{v}/{base_location}"))
+                },
+            )
+        };
 
         let catalog_database =
             get_yaml_str(bigquery, FIELD_CATALOG_DATABASE).map(|s| s.to_string());
-        let lakehouse_catalog =
-            get_yaml_str(bigquery, FIELD_LAKEHOUSE_CATALOG).map(|s| s.to_string());
 
         let mut adapter_properties = BTreeMap::new();
 
         if let Some(connection_id) = connection_id {
             adapter_properties.insert(FIELD_CONNECTION_ID.to_string(), connection_id);
         }
-        adapter_properties.insert(FIELD_STORAGE_URI.to_string(), storage_uri);
+        if let Some(storage_uri) = storage_uri {
+            adapter_properties.insert(FIELD_STORAGE_URI.to_string(), storage_uri);
+        }
 
         Ok(CatalogRelation {
             adapter_type: AdapterType::Bigquery,
@@ -1895,7 +1915,7 @@ impl CatalogRelation {
             catalog_database,
             lakehouse_catalog,
             base_location: None,
-            file_format: Some(file_format),
+            file_format,
         })
     }
 
@@ -2660,6 +2680,75 @@ catalogs:
             assert_eq!(r.lakehouse_catalog.as_deref(), Some("sales_catalog"));
             assert!(r.catalog_database.is_none());
         }
+    }
+
+    // dbt-labs/fs: docs/build/iceberg/adapters/bigquery-iceberg-support.md's own LRC
+    // example omits external_volume/file_format ("An LRC catalog doesn't need
+    // external_volume or file_format"). Confirm that config actually parses.
+    #[test]
+    fn bigquery_lrc_without_external_volume_or_file_format() {
+        let catalogs = load_catalogs_yaml(
+            r#"
+catalogs:
+  - name: my_lrc_catalog
+    type: biglake_metastore
+    table_format: iceberg
+    config:
+      bigquery:
+        lakehouse_catalog: sales_catalog
+"#,
+        );
+        let conf = json!({
+            "catalog_name": "my_lrc_catalog",
+            "schema": "analytics",
+            "alias": "events"
+        });
+        let ms = [
+            model(AdapterType::Bigquery, conf.clone()),
+            model_deprecated_config(conf),
+        ];
+
+        for m in ms {
+            let r = from_model_config_and_catalogs_default(
+                AdapterType::Bigquery,
+                &m,
+                Arc::new(catalogs.clone()),
+            )
+            .unwrap();
+
+            assert_eq!(r.lakehouse_catalog.as_deref(), Some("sales_catalog"));
+            assert_eq!(r.file_format, None);
+            assert!(!r.adapter_properties.contains_key("storage_uri"));
+        }
+    }
+
+    #[test]
+    fn bigquery_lrc_ignores_model_storage_uri() {
+        let catalogs = load_catalogs_yaml(
+            r#"
+catalogs:
+  - name: my_lrc_catalog
+    type: biglake_metastore
+    table_format: iceberg
+    config:
+      bigquery:
+        lakehouse_catalog: sales_catalog
+"#,
+        );
+        let m = model(
+            AdapterType::Bigquery,
+            json!({
+                "catalog_name": "my_lrc_catalog",
+                "schema": "analytics",
+                "alias": "events",
+                "storage_uri": "gs://my-bucket/manual"
+            }),
+        );
+
+        let r =
+            from_model_config_and_catalogs_default(AdapterType::Bigquery, &m, Arc::new(catalogs))
+                .expect("a model-level storage_uri must not fail an LRC catalog");
+        assert!(!r.adapter_properties.contains_key("storage_uri"));
     }
 
     #[test]
