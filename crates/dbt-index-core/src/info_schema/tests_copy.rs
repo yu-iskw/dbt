@@ -506,6 +506,16 @@ fn write_meta_config_corpus(metadata_dir: &Path) {
         nodes_schema,
         &[
             node(
+                "model.pkg.orders",
+                "model",
+                "orders",
+                json!({
+                    "config": {"enabled": true, "materialized": "view", "meta": {"owner_team": "data"}},
+                    "__model_attr__": {},
+                    "__common_attr__": {"name": "orders"},
+                }),
+            ),
+            node(
                 "exposure.pkg.with_meta",
                 "exposure",
                 "with_meta",
@@ -653,6 +663,15 @@ fn meta_and_config_reach_exposures_unit_tests_and_node_columns() {
             config["tags"],
             json!(["nightly"]),
             "{how:?}: unit_tests.config"
+        );
+
+        // A model's `config` is the object's JSON text, like every other node's. It was once
+        // the text encoded a second time on COPY, so `json_extract` found nothing in it.
+        let models = super::tests::out_rows(&dir, "dbt.models.parquet");
+        assert_eq!(
+            json_of(&models[0], "config"),
+            json!({"enabled": true, "materialized": "view", "meta": {"owner_team": "data"}}),
+            "{how:?}: models.config"
         );
 
         let first = |file: &str| super::tests::out_rows(&dir, file).remove(0);

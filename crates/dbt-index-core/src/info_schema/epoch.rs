@@ -818,19 +818,9 @@ const NODES: &[(&str, EpochExpr)] = &[
              json_extract(t.payload, '$.latest_version'))",
         ),
     ),
-    // `config` survives the model trim, but as a *raw JSON string* rather than
-    // a parsed object, and the builder then serialises whatever it holds — so a
-    // model's `config` is the JSON encoding of a string containing JSON, one
-    // level deeper than every other node's. `to_json` of the text reproduces
-    // that; the `ELSE` branch is the ordinary parsed-object form.
-    (
-        "config",
-        EpochExpr::SqlJson(
-            "CASE WHEN t.resource_type = 'model' \
-             THEN to_json(CAST(json_extract(t.payload, '$.config') AS VARCHAR)) \
-             ELSE json_extract(t.payload, '$.config') END",
-        ),
-    ),
+    // The payload holds `config` as an object for every node type, and the ingest writer
+    // stores it as that object's JSON text, so this is the same form for all of them.
+    ("config", EpochExpr::JsonRaw("config")),
     // Three payload shapes in `or_else` order, the first two of which survive
     // the model trim. `unwrap_or(false)`, so absent is false rather than null.
     //
