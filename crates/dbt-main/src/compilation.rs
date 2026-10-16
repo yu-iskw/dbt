@@ -68,7 +68,8 @@ use dbt_common::{
     io_utils::{checkpoint_error_count_maybe_exit, checkpoint_maybe_exit},
     path::DbtPath,
     tracing::dbt_emit::{
-        emit_info_log_message, emit_warn_log_from_fs_error, emit_warn_log_message,
+        emit_info_log_message, emit_info_progress_message, emit_warn_log_from_fs_error,
+        emit_warn_log_message,
     },
     tracing::emit::emit_info_event,
 };
@@ -103,7 +104,7 @@ use dbt_tasks_sa::{
     run_operation::{INLINE_SQL_NAME, run_operation, run_operation_inline_sql},
 };
 use dbt_tasks_sa::{graph::GraphBuilder, utils::typecheck_macros};
-use dbt_telemetry::{ExecutionPhase, NodeType, PhaseExecuted, ShowResult};
+use dbt_telemetry::{ExecutionPhase, NodeType, PhaseExecuted, ProgressMessage, ShowResult};
 
 use std::{
     borrow::Cow,
@@ -2744,6 +2745,14 @@ fn set_runtime_max_parallelism(arg: &EvalArgs, dbt_state: &DbtState) {
             }
         }
     };
+    emit_info_progress_message(ProgressMessage::new_with_description(
+        "Using".to_string(),
+        format!(
+            "{threads} {}",
+            if threads == 1 { "thread" } else { "threads" }
+        ),
+        format!("target: {}", dbt_state.dbt_profile.target),
+    ));
     dbt_runtime::Handle::current().set_max_parallelism(NonZeroUsize::new(threads).unwrap());
 }
 
