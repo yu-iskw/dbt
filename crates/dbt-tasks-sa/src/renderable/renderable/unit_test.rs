@@ -222,16 +222,10 @@ pub(crate) async fn run_unit_test_render(
     // Phase 1 — Discover
     let ut = node.clone();
     let mut discover_ctx = ctx.clone();
-    let discover_outcome = run_blocking_task_operation(move || {
-        // Downcast to DbtUnitTest for access to unit test fields
-        let ut_ref = ut
-            .as_any()
-            .downcast_ref::<DbtUnitTest>()
-            .expect("run_unit_test_render called on non-DbtUnitTest");
-        discover_given_relations(ut_ref, &mut discover_ctx)
-    })
-    .await
-    .and_then(|inner| inner);
+    let discover_outcome =
+        run_blocking_task_operation(move || discover_given_relations(&ut, &mut discover_ctx))
+            .await
+            .and_then(|inner| inner);
     let given_relations = match discover_outcome {
         Ok(r) => r,
         Err(e) => {
@@ -268,11 +262,7 @@ pub(crate) async fn run_unit_test_render(
     // Phase 3 — Render (uses cached schemas + discovered relations)
     run_blocking_task_operation(move || {
         let mut ctx = ctx;
-        let ut_ref = node
-            .as_any()
-            .downcast_ref::<DbtUnitTest>()
-            .expect("run_unit_test_render called on non-DbtUnitTest");
-        let res = render_unit_test(ut_ref, &mut ctx, given_relations, task_hooks.as_ref());
+        let res = render_unit_test(&node, &mut ctx, given_relations, task_hooks.as_ref());
         handle_render_result(
             res,
             &node.unique_id(),
@@ -1218,14 +1208,18 @@ fn extract_expect_values<'a>(
 /// Step 0 (blocking): Eval Jinja for each `given` input to discover relations.
 /// Returns the resolved relations and any that need async schema fetching.
 fn discover_given_relations(
-    ut: &DbtUnitTest,
+    node: &Arc<dyn InternalDbtNodeAttributes>,
     ctx: &mut TaskRunnerCtx,
 ) -> FsResult<DiscoveredGivenRelations> {
+    let ut = node
+        .as_any()
+        .downcast_ref::<DbtUnitTest>()
+        .expect("run_unit_test_render called on non-DbtUnitTest");
     let mut base_context = ctx.inner.base_context.clone();
     add_task_context(&mut base_context, ut.common(), &ctx.thread_id);
 
     let (compile_context, _config_map) = ctx.build_compile_node_context(
-        ut,
+        node.clone(),
         &base_context,
         DependencyValidationConfig::new_unvalidated(),
     )?;
@@ -1386,11 +1380,15 @@ fn check_defer_relation(
 }
 
 fn render_unit_test(
-    node: &DbtUnitTest,
+    unit_test: &Arc<dyn InternalDbtNodeAttributes>,
     ctx: &mut TaskRunnerCtx,
     given_relations: DiscoveredGivenRelations,
     task_hooks: &dyn RenderTaskHooks,
 ) -> FsResult<(SqlInstruction, Arc<DashMap<String, MinijinjaValue>>)> {
+    let node = unit_test
+        .as_any()
+        .downcast_ref::<DbtUnitTest>()
+        .expect("run_unit_test_render called on non-DbtUnitTest");
     let DiscoveredGivenRelations {
         given_relations,
         given_relation_ids,
@@ -1465,7 +1463,7 @@ fn render_unit_test(
 
     // Build compile context first so we can use it for rendering given_fqn
     let (mut compile_context, config_map) = ctx.build_compile_node_context(
-        node,
+        unit_test.clone(),
         &base_context,
         DependencyValidationConfig::new_for_node(node)
             .validate()

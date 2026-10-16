@@ -665,8 +665,8 @@ pub async fn resolve_snapshots(
             };
 
             // Update with relation components
-            update_node_relation_components(
-                &mut dbt_snapshot,
+            dbt_snapshot = update_node_relation_components(
+                dbt_snapshot,
                 &jinja_env,
                 &root_package.dbt_project.name,
                 &package_name,
