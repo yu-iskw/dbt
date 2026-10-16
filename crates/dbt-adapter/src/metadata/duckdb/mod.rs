@@ -1,6 +1,6 @@
 use crate::AdapterEngine;
 use crate::adapter::adapter_impl::AdapterImpl;
-use crate::connection::AdapterConnectionFactory;
+use crate::connection::{AdapterConnectionFactory, ConnectionGuard};
 use crate::load_catalogs;
 use crate::relation::do_create_relation;
 use crate::sql_types::{TypeOps, make_arrow_field_v2};
@@ -11,7 +11,7 @@ use arrow_array::{Array, Int32Array, RecordBatch, StringArray};
 
 use dbt_adapter_core::{AdapterType, ExecutionPhase};
 use dbt_adapter_engine::MapReduce;
-use dbt_adbc::{Connection, QueryCtx};
+use dbt_adbc::QueryCtx;
 use dbt_common::cancellation::Cancellable;
 use dbt_common::cancellation::CancellationToken;
 use dbt_schemas::dbt_types::RelationType;
@@ -179,7 +179,7 @@ impl MetadataAdapter for DuckDBMetadataAdapter {
 
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           key: &(String, String)|
               -> AdapterResult<Arc<Schema>> {
             let (_, rendered) = key;
@@ -256,7 +256,7 @@ impl MetadataAdapter for DuckDBMetadataAdapter {
 
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           db_schema: &CatalogAndSchema|
               -> AdapterResult<Vec<Arc<dyn BaseRelation>>> {
             let ctx = QueryCtx::default().with_desc("list_relations_in_parallel");
@@ -350,7 +350,7 @@ fn list_relations_sql(quoting: ResolvedQuoting, db_schema: &CatalogAndSchema) ->
 pub fn list_relations(
     engine: &dyn AdapterEngine,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     db_schema: &CatalogAndSchema,
     token: CancellationToken,
 ) -> AdapterResult<Vec<Arc<dyn BaseRelation>>> {
@@ -371,7 +371,7 @@ pub fn list_relations(
 
     let sql = list_relations_sql(engine.quoting(), db_schema);
 
-    let batch = engine.execute(None, conn, ctx, &sql, token)?;
+    let batch = engine.execute(None, conn.as_mut(), ctx, &sql, token)?;
 
     if batch.num_rows() == 0 {
         return Ok(Vec::new());

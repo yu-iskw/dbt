@@ -348,7 +348,11 @@ impl InnerAdbcDatabase {
             } else {
                 managed_database.new_connection_with_opts(conn_opts)
             };
-            Ok(AdbcConnection(self.backend, conn_res?, 0))
+            Ok(AdbcConnection {
+                backend: self.backend,
+                inner: conn_res?,
+                fingerprint: 0,
+            })
         };
 
         let conn = if db_opts.is_empty() {

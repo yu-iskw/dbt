@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
-use crate::connection::AdapterConnectionFactory;
+use crate::connection::{AdapterConnectionFactory, ConnectionGuard};
 
 use crate::time_machine::{args_freshness_with_overrides, with_time_machine_metadata_wrapper};
 use arrow_array::*;
@@ -12,7 +12,7 @@ use arrow_schema::{Field, Schema};
 use dbt_adapter_core::AdapterType;
 use dbt_adapter_core::ExecutionPhase;
 use dbt_adapter_engine::MapReduce;
-use dbt_adbc::{Connection, QueryCtx};
+use dbt_adbc::QueryCtx;
 use dbt_agate::AgateTable;
 use dbt_common::ErrorCode;
 use dbt_common::cancellation::Cancellable;
@@ -69,7 +69,7 @@ pub fn list_relations(
     engine: &dyn AdapterEngine,
     state: Option<&State>,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     db_schema: &CatalogAndSchema,
     token: CancellationToken,
 ) -> AdapterResult<Vec<Arc<dyn BaseRelation>>> {
@@ -105,7 +105,8 @@ WHERE table_catalog = '{}'
                             &db_schema.resolved_schema.to_lowercase());
 
     let options = databricks_statement_options(engine.adapter_type(), state)?;
-    let batch = engine.execute_with_options(None, ctx, conn, &sql, options, true, token)?;
+    let batch =
+        engine.execute_with_options(None, ctx, conn.as_mut(), &sql, options, true, token)?;
 
     if batch.num_rows() == 0 {
         return Ok(Vec::new());
@@ -359,7 +360,7 @@ impl DatabricksMetadataAdapter {
             .get_or_init(move || {
                 let query_ctx = QueryCtx::default().with_desc("get_engine_version adapter call");
                 let mut conn = self.adapter.borrow_tlocal_connection(None, node_id)?;
-                Self::get_engine_version(&self.adapter, &query_ctx, conn.as_mut(), token)
+                Self::get_engine_version(&self.adapter, &query_ctx, &mut conn, token)
             })
             .clone()
     }
@@ -372,7 +373,7 @@ impl DatabricksMetadataAdapter {
     /// the query runs once per process, for whichever of the two asks first.
     fn engine_version_with_conn(
         adapter: &AdapterImpl,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<EngineVersion> {
         CACHED_ENGINE_VERSION
@@ -397,7 +398,7 @@ impl DatabricksMetadataAdapter {
     pub fn get_engine_version(
         adapter: &AdapterImpl,
         ctx: &QueryCtx,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<EngineVersion> {
         match adapter.adapter_type() {
@@ -442,7 +443,7 @@ impl DatabricksMetadataAdapter {
     pub(crate) fn fetch_relation_config_from_remote(
         &self,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         base_relation: &Arc<dyn BaseRelation>,
         model_config: Option<&RelationConfig>,
         token: CancellationToken,
@@ -856,7 +857,7 @@ impl DatabricksMetadataAdapter {
         sql: &str,
         state: &State,
         desc: &str,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<(AdapterResponse, AgateTable)> {
         let ctx = query_ctx_from_state(state)?.with_desc(desc);
@@ -880,7 +881,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         // match Mantle casing
@@ -897,7 +898,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let sql = format!(
@@ -920,7 +921,7 @@ impl DatabricksMetadataAdapter {
         &self,
         relation_str: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let sql = format!("SHOW TBLPROPERTIES {relation_str}");
@@ -936,7 +937,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let (database, schema, identifier) = (
@@ -969,7 +970,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let (database, schema, identifier) = (
@@ -1005,7 +1006,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let (database, schema, identifier) = (
@@ -1035,7 +1036,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let sql = format!(
@@ -1065,7 +1066,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let (database, schema, identifier) = (
@@ -1112,7 +1113,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let sql = format!(
@@ -1135,7 +1136,7 @@ impl DatabricksMetadataAdapter {
         schema: &str,
         identifier: &str,
         state: &State,
-        conn: &mut dyn Connection,
+        conn: &mut ConnectionGuard<'_>,
         token: CancellationToken,
     ) -> AdapterResult<AgateTable> {
         let sql = format!(
@@ -1181,7 +1182,7 @@ impl DatabricksMetadataAdapter {
 
         let token_clone = token.clone();
         let adapter_for_map = self.adapter.clone();
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           task: &FreshnessTask|
               -> AdapterResult<FreshnessTaskResult> {
             match task {
@@ -1376,7 +1377,7 @@ impl MetadataAdapter for DatabricksMetadataAdapter {
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
         let node_id = unique_id.clone();
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           relation: &Arc<dyn BaseRelation>|
               -> AdapterResult<Arc<Schema>> {
             let (database, schema, identifier) = get_relation_with_quote_policy(relation)?;
@@ -1500,7 +1501,7 @@ impl MetadataAdapter for DatabricksMetadataAdapter {
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
 
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           relation: &Arc<dyn BaseRelation>|
               -> AdapterResult<Option<MetadataFreshness>> {
             databricks_freshness_for_relation(&adapter, &mut *conn, relation, token_clone.clone())
@@ -1557,7 +1558,7 @@ impl MetadataAdapter for DatabricksMetadataAdapter {
 
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           db_schema: &CatalogAndSchema|
               -> AdapterResult<Vec<Arc<dyn BaseRelation>>> {
             let query_ctx = QueryCtx::default().with_desc("list_relations_in_parallel (UC)");
@@ -1636,13 +1637,14 @@ impl MetadataAdapter for DatabricksMetadataAdapter {
 
         let adapter = self.adapter.clone();
         let token_clone = token.clone();
-        let map_f =
-            move |conn: &'_ mut dyn Connection, fqn: &String| -> AdapterResult<Arc<RecordBatch>> {
-                let sql = format!("DESCRIBE EXTENDED {fqn}");
-                let ctx = QueryCtx::default().with_desc("Fetch view definition");
-                let (_, table) = adapter.query(&ctx, conn, &sql, None, token_clone.clone())?;
-                Ok(table.original_record_batch())
-            };
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
+                          fqn: &String|
+              -> AdapterResult<Arc<RecordBatch>> {
+            let sql = format!("DESCRIBE EXTENDED {fqn}");
+            let ctx = QueryCtx::default().with_desc("Fetch view definition");
+            let (_, table) = adapter.query(&ctx, conn, &sql, None, token_clone.clone())?;
+            Ok(table.original_record_batch())
+        };
 
         let reduce_f = |acc: &mut Acc,
                         fqn: String,
@@ -1740,7 +1742,7 @@ impl MetadataAdapter for DatabricksMetadataAdapter {
         let token_clone = token.clone();
         type Acc = BTreeMap<String, MetadataFreshness>;
         let factory = Box::new(AdapterConnectionFactory::new(adapter.engine().clone()));
-        let map_f = move |conn: &'_ mut dyn Connection,
+        let map_f = move |conn: &mut ConnectionGuard<'_>,
                           relation: &Arc<dyn BaseRelation>|
               -> AdapterResult<Option<MetadataFreshness>> {
             databricks_freshness_for_relation(&adapter, &mut *conn, relation, token_clone.clone())
@@ -1821,7 +1823,7 @@ fn partition_override_relations(
 
 fn databricks_freshness_for_relation(
     adapter: &AdapterImpl,
-    conn: &mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     relation: &Arc<dyn BaseRelation>,
     token: CancellationToken,
 ) -> AdapterResult<Option<MetadataFreshness>> {

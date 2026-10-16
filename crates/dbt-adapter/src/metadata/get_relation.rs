@@ -1,9 +1,10 @@
+use crate::connection::ConnectionGuard;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow::array::{Array as _, StringArray};
 use dbt_adapter_core::AdapterType;
-use dbt_adbc::{Connection, QueryCtx};
+use dbt_adbc::QueryCtx;
 use dbt_common::{AdapterError, AdapterErrorKind, AdapterResult};
 use dbt_schemas::dbt_types::RelationType;
 use dbt_schemas::schemas::common::normalize_quote;
@@ -41,7 +42,7 @@ pub fn get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -127,7 +128,7 @@ fn snowflake_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -157,7 +158,7 @@ fn snowflake_get_relation(
 
     let batch = match adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)
     {
         Ok(b) => b,
         Err(e) => {
@@ -265,7 +266,7 @@ fn snowflake_get_relation(
 fn bigquery_get_relation_via_adbc(
     adapter: &AdapterImpl,
     state: &State,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -321,7 +322,7 @@ fn bigquery_get_relation_via_adbc(
 
     // TODO: This is loaded lazily in dbt Core when required by certain macros:
     // Ex: https://github.com/dbt-labs/dbt-adapters/blob/9fce78f44db248ba33832c0f65c884a5139c0169/dbt-bigquery/src/dbt/include/bigquery/macros/adapters/apply_grants.sql#L2-L3
-    let location = adapter.get_dataset_location(state, conn, relation.as_ref(), token)?;
+    let location = adapter.get_dataset_location(state, conn.as_mut(), relation.as_ref(), token)?;
     relation.location = location;
     Ok(Some(relation))
 }
@@ -332,7 +333,7 @@ fn bigquery_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -366,7 +367,7 @@ fn bigquery_get_relation(
 
     let result = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token.clone());
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token.clone());
     let batch = match result {
         Ok(batch) => batch,
         Err(err) => {
@@ -399,7 +400,7 @@ fn bigquery_get_relation(
         .with_relation_type(relation_type)
         .with_quoting(adapter.quoting()),
     );
-    let location = adapter.get_dataset_location(state, conn, relation.as_ref(), token)?;
+    let location = adapter.get_dataset_location(state, conn.as_mut(), relation.as_ref(), token)?;
     relation.location = location;
     Ok(Some(relation))
 }
@@ -477,7 +478,7 @@ fn spark_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     schema: &str,
     identifier: &str,
     token: CancellationToken,
@@ -497,7 +498,7 @@ fn spark_get_relation(
     let sql = format!("DESCRIBE TABLE EXTENDED {query_schema}.{query_identifier}");
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token);
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token);
     if let Err(e) = &batch
         && (e.to_string().contains("cannot be found")
             || e.to_string().contains("TABLE_OR_VIEW_NOT_FOUND")
@@ -534,7 +535,7 @@ fn databricks_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -602,7 +603,7 @@ fn databricks_get_relation(
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token);
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token);
     if let Err(e) = &batch
         && (e.to_string().contains("cannot be found")
             || e.to_string().contains("TABLE_OR_VIEW_NOT_FOUND"))
@@ -671,7 +672,7 @@ fn redshift_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -712,7 +713,7 @@ LEFT JOIN materialized_views mv
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
 
     if batch.num_rows() == 0 {
         // If there are no rows, then we did not find the object
@@ -754,7 +755,7 @@ fn postgres_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -793,7 +794,7 @@ fn postgres_get_relation(
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
     if batch.num_rows() == 0 {
         return Ok(None);
     }
@@ -831,7 +832,7 @@ fn exasol_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -861,7 +862,7 @@ fn exasol_get_relation(
     );
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
     if batch.num_rows() == 0 {
         return Ok(None);
     }
@@ -892,7 +893,7 @@ fn salesforce_get_relation(
     _adapter: &AdapterImpl,
     _state: &State,
     _query_ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     _schema: &str,
     identifier: &str,
@@ -919,7 +920,7 @@ fn duckdb_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -962,7 +963,7 @@ fn duckdb_get_relation(
         let sql = format!("DESCRIBE {relation_name}");
         let result = adapter
             .engine()
-            .execute(Some(state), conn, ctx, &sql, token);
+            .execute(Some(state), conn.as_mut(), ctx, &sql, token);
 
         match result {
             Ok(_) => {
@@ -1004,7 +1005,7 @@ fn duckdb_get_relation(
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
     if batch.num_rows() == 0 {
         return Ok(None);
     }
@@ -1045,7 +1046,7 @@ fn fabric_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -1078,7 +1079,7 @@ fn fabric_get_relation(
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
 
     if batch.num_rows() == 0 {
         // If there are no rows, then we did not find the object
@@ -1116,7 +1117,7 @@ fn clickhouse_get_relation(
     adapter: &AdapterImpl,
     state: &State,
     ctx: &QueryCtx,
-    conn: &'_ mut dyn Connection,
+    conn: &mut ConnectionGuard<'_>,
     database: &str,
     schema: &str,
     identifier: &str,
@@ -1135,12 +1136,16 @@ fn clickhouse_get_relation(
 
     // Probe over the connection we already hold: the State-based entry would
     // borrow a second thread-local connection and trip the nested-guard check.
-    let caps =
-        server_capabilities_over_connection(adapter.engine().as_ref(), ctx, conn, token.clone());
+    let caps = server_capabilities_over_connection(
+        adapter.engine().as_ref(),
+        ctx,
+        conn.as_mut(),
+        token.clone(),
+    );
 
     let batch = adapter
         .engine()
-        .execute(Some(state), conn, ctx, &sql, token)?;
+        .execute(Some(state), conn.as_mut(), ctx, &sql, token)?;
     if batch.num_rows() == 0 {
         return Ok(None);
     }

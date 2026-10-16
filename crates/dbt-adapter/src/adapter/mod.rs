@@ -339,7 +339,7 @@ impl Adapter {
                 let t_execute = std::time::Instant::now();
                 let result = adapter.execute(
                     None,
-                    conn.as_mut(),
+                    &mut conn,
                     ctx,
                     sql,
                     false,
@@ -890,7 +890,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let (response, table) = adapter.execute(
                     Some(state),
-                    conn.as_mut(),
+                    &mut conn,
                     ctx,
                     sql,
                     auto_begin,
@@ -959,7 +959,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 adapter.add_query(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     sql,
                     auto_begin,
                     bindings,
@@ -1000,7 +1000,7 @@ impl Adapter {
 
                 let response = adapter.submit_python_job(
                     &ctx,
-                    conn.as_mut(),
+                    &mut conn,
                     state,
                     model,
                     compiled_code,
@@ -1475,7 +1475,7 @@ impl Adapter {
                             let maybe_relations_list = adapter.list_relations(
                                 Some(state),
                                 &query_ctx,
-                                conn.as_mut(),
+                                &mut conn,
                                 &db_schema,
                                 self.cancellation_token.clone(),
                             );
@@ -1486,7 +1486,7 @@ impl Adapter {
                                 cache.insert_many(to_insert.into_iter());
                                 match adapter.list_relation_dependency_links(
                                     &query_ctx,
-                                    conn.as_mut(),
+                                    &mut conn,
                                     &db_schema,
                                     self.cancellation_token.clone(),
                                 ) {
@@ -1538,7 +1538,7 @@ impl Adapter {
                 let relation = adapter.get_relation(
                     state,
                     &query_ctx,
-                    conn.as_mut(),
+                    &mut conn,
                     database,
                     schema,
                     identifier,
@@ -1768,7 +1768,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let result = adapter.get_column_schema_from_query(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     &ctx,
                     sql,
                     query_settings,
@@ -1800,7 +1800,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let result = adapter.get_columns_in_select_sql(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     &ctx,
                     sql,
                     self.cancellation_token.clone(),
@@ -2034,7 +2034,7 @@ impl Adapter {
                 let mut conn =
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let result = adapter.is_replaceable(
-                    conn.as_mut(),
+                    &mut conn,
                     relation,
                     partition_by,
                     cluster_by,
@@ -2502,7 +2502,7 @@ impl Adapter {
                 let result = adapter.list_relations(
                     Some(state),
                     &query_ctx,
-                    conn.as_mut(),
+                    &mut conn,
                     &CatalogAndSchema::from(schema_relation.as_ref()),
                     self.cancellation_token.clone(),
                 )?;
@@ -2623,7 +2623,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let result = adapter.compare_dbr_version(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     major,
                     minor,
                     self.cancellation_token.clone(),
@@ -2927,7 +2927,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 adapter.update_tblproperties_for_uniform_iceberg(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     config,
                     &node,
                     &mut tblproperties,
@@ -2983,7 +2983,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let result = adapter.is_uniform(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     config,
                     &node,
                     self.cancellation_token.clone(),
@@ -3090,7 +3090,7 @@ impl Adapter {
 
                 adapter.describe_relation(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     &relation,
                     include_transient,
                     self.cancellation_token.clone(),
@@ -3322,7 +3322,7 @@ impl Adapter {
                     adapter.borrow_tlocal_connection(Some(state), node_id_from_state(state))?;
                 let config = adapter.get_relation_config(
                     state,
-                    conn.as_mut(),
+                    &mut conn,
                     &relation,
                     model_config.as_deref(),
                     self.cancellation_token.clone(),
@@ -3638,7 +3638,7 @@ impl Adapter {
 
                 let mut conn = adapter.borrow_tlocal_connection(None, Some(node_id.to_string()))?;
                 let warehouse_changed = adapter.use_warehouse(
-                    conn.as_mut(),
+                    &mut conn,
                     warehouse,
                     node_id,
                     self.cancellation_token.clone(),
@@ -3665,11 +3665,7 @@ impl Adapter {
         match &self.inner {
             Typed { adapter, .. } => {
                 let mut conn = adapter.borrow_tlocal_connection(None, Some(node_id.to_string()))?;
-                adapter.restore_warehouse(
-                    conn.as_mut(),
-                    node_id,
-                    self.cancellation_token.clone(),
-                )?;
+                adapter.restore_warehouse(&mut conn, node_id, self.cancellation_token.clone())?;
                 Ok(())
             }
             Parse(_) => Ok(()),
@@ -3715,7 +3711,7 @@ impl Adapter {
                     let mut conn =
                         adapter.borrow_tlocal_connection(None, Some(node_id.to_string()))?;
                     adapter.use_database(
-                        conn.as_mut(),
+                        &mut conn,
                         database,
                         node_id,
                         self.cancellation_token.clone(),
@@ -3742,7 +3738,7 @@ impl Adapter {
         match &self.inner {
             Typed { adapter, .. } => {
                 let mut conn = adapter.borrow_tlocal_connection(None, Some(node_id.to_string()))?;
-                adapter.reset_database(conn.as_mut(), node_id, self.cancellation_token.clone())?;
+                adapter.reset_database(&mut conn, node_id, self.cancellation_token.clone())?;
                 Ok(())
             }
             Parse(_) => Ok(()),
@@ -3803,7 +3799,7 @@ impl Adapter {
                 let sql = "";
                 let result = adapter.load_dataframe(
                     &ctx,
-                    conn.as_mut(),
+                    &mut conn,
                     sql,
                     database,
                     schema,
@@ -4717,7 +4713,7 @@ impl Adapter {
         let routines = match bigquery::list_routines(
             adapter.engine().as_ref(),
             &query_ctx,
-            conn.as_mut(),
+            &mut conn,
             &db_schema,
             self.cancellation_token.clone(),
         ) {
