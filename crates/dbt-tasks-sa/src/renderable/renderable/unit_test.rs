@@ -2868,6 +2868,10 @@ mod tests {
     /// Binds `value` as the `run_started_at` override and renders `template`,
     /// exercising the same path unit tests use.
     fn render_run_started_at_override(value: YmlValue, template: &str) -> String {
+        assert!(
+            dbt_runtime::is_pool_worker(),
+            "Jinja must render on a dbt-runtime worker"
+        );
         let mut raw_env = minijinja::Environment::new();
         minijinja_contrib::add_to_environment(&mut raw_env);
         let env = JinjaEnv::new(raw_env);
@@ -2886,7 +2890,7 @@ mod tests {
     /// dbt-core lets `overrides.macros` freeze `run_started_at`, but unlike a
     /// real macro override it's accessed without `()`, so wrapping it as a
     /// callable stub broke `.strftime()`/`.astimezone()`.
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_run_started_at_override_binds_a_real_value_not_a_callable_stub() {
         let rendered = render_run_started_at_override(
             YmlValue::string(
@@ -2901,7 +2905,7 @@ mod tests {
     // Unhappy paths: a non-datetime override must still bind as a plain value,
     // never a callable stub, so bare interpolation renders it. `.strftime()` on
     // these would error the same as it does in dbt-core.
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_run_started_at_override_plain_string_binds_as_value() {
         let rendered = render_run_started_at_override(
             YmlValue::string("2025-09-04 20:00:00".to_string()),
@@ -2910,7 +2914,7 @@ mod tests {
         assert_eq!(rendered, "2025-09-04 20:00:00");
     }
 
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_run_started_at_override_non_datetime_expression_evaluates() {
         let rendered = render_run_started_at_override(
             YmlValue::string("{{ 'hello' }}".to_string()),
@@ -2919,7 +2923,7 @@ mod tests {
         assert_eq!(rendered, "hello");
     }
 
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_run_started_at_override_non_string_binds_as_value() {
         let rendered =
             render_run_started_at_override(YmlValue::number(12345.into()), "{{ run_started_at }}");
@@ -2955,6 +2959,10 @@ mod tests {
     /// Binds one `overrides.macros` entry over a `my_project` package and renders
     /// `{{ my_project.pick_label() }}`, where `pick_label` calls `my_project.is_ci()`.
     fn render_package_macro_override(macro_name: &str, value: YmlValue) -> String {
+        assert!(
+            dbt_runtime::is_pool_worker(),
+            "Jinja must render on a dbt-runtime worker"
+        );
         let mut raw_env = minijinja::Environment::new();
         let pick_label = "{% macro pick_label() %}{% if my_project.is_ci() %}{{ return('ci') }}\
                           {% else %}{{ return('local') }}{% endif %}{% endmacro %}";
@@ -2989,13 +2997,13 @@ mod tests {
     /// Regression test for https://github.com/dbt-labs/dbt/issues/16477: overriding
     /// one package macro must keep the package's other macros callable, and they
     /// must see the override, as in dbt-core.
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_package_macro_override_is_seen_by_other_package_macros() {
         let rendered = render_package_macro_override("my_project.is_ci", YmlValue::bool(true));
         assert_eq!(rendered, "ci");
     }
 
-    #[test]
+    #[dbt_runtime::worker_test]
     fn test_package_macro_override_keeps_unrelated_package_macros() {
         let rendered = render_package_macro_override(
             "my_project.unused_macro",
