@@ -1,7 +1,7 @@
 //! A mini-framework for running parallel Key-to-Value tasks over a bounded
 //! number of workers in dbt-runtime and reducing the results.
 
-use dbt_base::cancel::{Cancellable, CancellationToken, CancelledError};
+use dbt_cancel::{Cancellable, CancellationToken, CancelledError};
 use dbt_runtime::{Handle, JoinHandle};
 use futures::FutureExt;
 use futures::stream::{FuturesUnordered, StreamExt};
