@@ -513,6 +513,15 @@ async fn fetch_schema_for_unit_test_relation(
     Ok(schema)
 }
 
+/// Prefer the original SQL type unless it is a bare NUMBER. `ColumnBuilder` stores
+/// its precision and scale separately; [`Column::data_type`] restores them.
+fn column_sql_type(column: &Column) -> Cow<'_, str> {
+    match column.original_sql_str() {
+        Some(sql_type) if !sql_type.eq_ignore_ascii_case("NUMBER") => Cow::Borrowed(sql_type),
+        _ => Cow::Owned(column.data_type()),
+    }
+}
+
 fn columns_to_schema(
     type_ops: &dyn TypeOps,
     columns: Vec<Column>,
@@ -521,10 +530,7 @@ fn columns_to_schema(
     let mut fields = Vec::with_capacity(columns.len());
 
     for column in columns {
-        let sql_type_str: Cow<str> = column
-            .original_sql_str()
-            .map(Cow::from)
-            .unwrap_or_else(|| column.data_type().into());
+        let sql_type_str = column_sql_type(&column);
 
         let field = make_arrow_field(
             type_ops,
@@ -4409,5 +4415,72 @@ mod tests {
         ]));
         let result = strip_pseudocolumns(&schema, AdapterType::Snowflake);
         assert!(Arc::ptr_eq(&schema, &result));
+    }
+
+    #[test]
+    fn column_sql_type_keeps_snowflake_number_precision_and_scale() {
+        let column = Column::new(
+            AdapterType::Snowflake,
+            "HALF_OF_ONE".to_string(),
+            "NUMBER".to_string(),
+            None,
+            Some(11),
+            Some(4),
+        );
+        assert_eq!(column_sql_type(&column), "NUMBER(11,4)");
+
+        let no_precision = Column::new(
+            AdapterType::Snowflake,
+            "ID".to_string(),
+            "NUMBER".to_string(),
+            None,
+            None,
+            None,
+        );
+        assert_eq!(column_sql_type(&no_precision), "NUMBER");
+    }
+
+    #[test]
+    fn columns_to_schema_preserves_snowflake_decimal_round_trip() {
+        let type_ops = DefaultTypeOps::new(AdapterType::Snowflake);
+        let builder = dbt_adapter::column::ColumnBuilder::new(AdapterType::Snowflake);
+
+        for (precision, scale) in [(11, 4), (38, 0), (38, 37), (4, 4)] {
+            let data_type = DataType::Decimal128(precision, scale);
+            let field = Arc::new(Field::new("AMOUNT", data_type.clone(), true));
+            let column = builder.build(&field, &type_ops).unwrap();
+            assert_eq!(column.original_sql_str(), Some("NUMBER"));
+            assert_eq!(column.data_type(), format!("NUMBER({precision},{scale})"));
+
+            let schema = columns_to_schema(&type_ops, vec![column], "unit_test.decimal").unwrap();
+            assert_eq!(schema.field(0).data_type(), &data_type);
+            assert_eq!(
+                type_ops
+                    .get_original_sql_type_from_field(schema.field(0))
+                    .unwrap(),
+                format!("NUMBER({precision},{scale})")
+            );
+        }
+    }
+
+    #[test]
+    fn column_sql_type_preserves_explicit_types_and_missing_metadata() {
+        for (sql_type, precision, scale) in [
+            ("NUMBER(9,2)", Some(11), Some(4)),
+            ("VARCHAR(40)", None, None),
+            ("TIMESTAMP_NTZ(6)", Some(6), None),
+            ("NUMBER", Some(11), None),
+            ("NUMBER", None, Some(4)),
+        ] {
+            let column = Column::new(
+                AdapterType::Snowflake,
+                "VALUE".to_string(),
+                sql_type.to_string(),
+                None,
+                precision,
+                scale,
+            );
+            assert_eq!(column_sql_type(&column), sql_type);
+        }
     }
 }
