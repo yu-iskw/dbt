@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 
 import { DescriptionDisplay } from './DescriptionDisplay';
 
@@ -45,6 +46,23 @@ export const InlineHtml: Story = {
   args: {
     description:
       'Owned by <b>finance analytics</b>.<br/>Contact <i>finance@example.com</i>.',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const bold = canvas.getByText('finance analytics', { selector: 'b' });
+    await expect(bold).toBeInTheDocument();
+  },
+};
+
+/** Untrusted inline HTML that loads a frame or runs a script must not reach the DOM. */
+export const ScriptPayload: Story = {
+  args: {
+    description: `<iframe srcdoc="&lt;script&gt;parent.document.documentElement.dataset.dbtPoc='executed'&lt;/script&gt;"></iframe>`,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvasElement.querySelector('iframe')).toBeNull();
+    void canvas;
   },
 };
 

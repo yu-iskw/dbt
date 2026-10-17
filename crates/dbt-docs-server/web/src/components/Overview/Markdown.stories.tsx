@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, within } from 'storybook/test';
 
 import { Markdown } from './Markdown';
 
@@ -110,6 +111,18 @@ export const RawHtml: Story = {
       '',
       '<div style="padding: 8px; border: 1px solid currentColor">An authored div.</div>',
     ].join('\n'),
+  },
+};
+
+/** Untrusted inline HTML that loads a frame or runs a script must not reach the DOM. */
+export const ScriptPayload: Story = {
+  args: {
+    children: `<iframe srcdoc="&lt;script&gt;parent.document.documentElement.dataset.dbtPoc='executed'&lt;/script&gt;"></iframe>`,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvasElement.querySelector('iframe')).toBeNull();
+    void canvas;
   },
 };
 
