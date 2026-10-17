@@ -39,9 +39,7 @@ export const Markdown: Story = {
   },
 };
 
-/** `rehype-raw` is enabled, so inline HTML in a `.yml` description renders as HTML
- *  rather than being escaped. Worth seeing, since it is also the reason a description
- *  is not a safe place for untrusted content. */
+/** `rehype-sanitize` keeps formatting tags in a description and drops script, frames, and event handlers. */
 export const InlineHtml: Story = {
   args: {
     description:
