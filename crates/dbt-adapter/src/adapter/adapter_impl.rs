@@ -4037,7 +4037,7 @@ impl AdapterImpl {
 
     /// A dropped relation is replaceable. Core does `except NotFound: return True`.
     fn replaceable_when_schema_lookup_fails(err: AdapterError) -> AdapterResult<bool> {
-        if err.kind() == AdapterErrorKind::NotFound {
+        if is_bigquery_not_found_error(&err) {
             Ok(true)
         } else {
             Err(err)
