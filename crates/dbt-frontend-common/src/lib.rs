@@ -2,6 +2,7 @@ pub mod column_resolution;
 pub mod constraint;
 pub mod error;
 pub mod expr;
+pub mod fix;
 pub mod ident;
 pub mod result;
 pub mod span;
