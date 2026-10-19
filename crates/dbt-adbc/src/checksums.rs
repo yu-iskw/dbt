@@ -1533,6 +1533,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "3ab569e6bcdbbf532be4d61141f741fe8c5f5127e85a288abb37719368d26295",
     ),
     (
+        ("snowflake", "apple-darwin", "aarch64", "0.21.0.dev+dbt0.21.20"),
+        "b776f2621cb8b49f311a4a29479c93f4aea1cb89da1fbee0bb4639ecee729bb4",
+    ),
+    (
         ("snowflake", "apple-darwin", "x86_64", "0.21.0.dev+dbt0.21.10"),
         "2373e633158e743e3df33ec7b79816f25c252be936e834a8e49400dd51c9f19e",
     ),
@@ -1571,6 +1575,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
     (
         ("snowflake", "apple-darwin", "x86_64", "0.21.0.dev+dbt0.21.19"),
         "61e0f6f48b16006d0014feeeae92481e4728fd37a928d89815bc0e0e8dcf17f5",
+    ),
+    (
+        ("snowflake", "apple-darwin", "x86_64", "0.21.0.dev+dbt0.21.20"),
+        "87c28cb07f7b2040db4185d18d51704f0027fa4fa13bb813ac434d83ecb21a3b",
     ),
     (
         ("snowflake", "manylinux_2_17-linux-gnu", "aarch64", "0.21.0.dev+dbt0.21.10"),
@@ -1613,6 +1621,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "24bc403f5be2aa8b234ceb1bf48e516038d640ed3de9a7a76b76caae66bd142c",
     ),
     (
+        ("snowflake", "manylinux_2_17-linux-gnu", "aarch64", "0.21.0.dev+dbt0.21.20"),
+        "174bb064208d269c700100cc5abd551114645c4d9807794025ad96e5d7f880d6",
+    ),
+    (
         ("snowflake", "manylinux_2_17-linux-gnu", "x86_64", "0.21.0.dev+dbt0.21.10"),
         "60212a57ec83687b8db4e5aeddda59b4f472b97518ba34322c4d3e8e64d14172",
     ),
@@ -1653,6 +1665,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "cb566010026758c01ace4b666057c93cb1b6dd5a363bd36ea3c69c0b138bd3c5",
     ),
     (
+        ("snowflake", "manylinux_2_17-linux-gnu", "x86_64", "0.21.0.dev+dbt0.21.20"),
+        "de5b5f08b54b65e1fba0b6eeb0abbbe68bf45550c7d259adaca87d4341d008a9",
+    ),
+    (
         ("snowflake", "pc-windows-msvc", "x86_64", "0.21.0.dev+dbt0.21.10"),
         "896042c7f2d8ffc82093a79239a1adaa938e436952088fe369b86ccfdd04a79a",
     ),
@@ -1691,6 +1707,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
     (
         ("snowflake", "pc-windows-msvc", "x86_64", "0.21.0.dev+dbt0.21.19"),
         "a65c7d916f5ead783a8cc462a46abe9aea8fd6e5508cff0158f418ac4f1fdc02",
+    ),
+    (
+        ("snowflake", "pc-windows-msvc", "x86_64", "0.21.0.dev+dbt0.21.20"),
+        "5a6cbb8d10f3c201eb41df62e36762c4b75f6d0bdfd73190ff8e081afc92e6d8",
     ),
     (
         ("spark", "apple-darwin", "aarch64", "0.21.0.dev+dbt0.1.0"),
