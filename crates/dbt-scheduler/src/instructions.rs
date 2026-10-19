@@ -8,6 +8,7 @@ use std::{
 use arrow_schema::SchemaRef;
 use dbt_adapter_core::AdapterType;
 use dbt_common::CompiledSpans;
+use dbt_frontend_common::result::LocalResultQuery;
 
 #[derive(Debug, Default, Clone)]
 pub struct Instructions {
@@ -88,6 +89,8 @@ pub struct RemotePlan {
     /// The plan emitted as SQL for the local engine, by the source adapter
     /// whose dialect it was emitted from. `Err` holds the emitter's message.
     pub emitted_sql: HashMap<AdapterType, Result<String, String>>,
+    /// Terminal queries and the metadata needed to collect their results.
+    pub result_queries: HashMap<AdapterType, Result<LocalResultQuery, String>>,
 }
 
 impl LpPlan {
