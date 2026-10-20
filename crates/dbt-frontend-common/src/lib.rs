@@ -4,6 +4,7 @@ pub mod error;
 pub mod expr;
 pub mod fix;
 pub mod ident;
+pub mod listener;
 pub mod result;
 pub mod span;
 pub mod types;
