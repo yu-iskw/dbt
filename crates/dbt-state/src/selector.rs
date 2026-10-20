@@ -79,6 +79,10 @@ pub async fn evaluate_state_selector(
     let macro_resolver = |macro_id: &str| args.macros.get(macro_id);
     let mut node_data_list = Vec::new();
     for (unique_id, node) in nodes.iter() {
+        // Plugin nodes are not in the manifest, and `state:` never selects them.
+        if nodes.plugins.contains_key(unique_id) {
+            continue;
+        }
         let hashes = node_state_hashes(node, &args.project_root, macro_resolver)?;
 
         let database = node.database();
