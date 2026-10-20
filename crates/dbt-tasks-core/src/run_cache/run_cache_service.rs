@@ -11,6 +11,7 @@
 //! adapter relation rendering, warehouse metadata lookups, and skip policy.
 //! Stable service DTO construction lives in `dbt-state::request_builder`.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -4545,8 +4546,11 @@ fn group_relations_by_database_and_schema(
     for (name, relation) in relations {
         grouped
             .entry((
-                relation.database_as_resolved_str().ok(),
-                relation.schema_as_resolved_str().ok(),
+                relation
+                    .database_as_resolved_str()
+                    .ok()
+                    .map(Cow::into_owned),
+                relation.schema_as_resolved_str().ok().map(Cow::into_owned),
             ))
             .or_insert_with(BTreeMap::new)
             .insert(name.clone(), Arc::clone(relation));
