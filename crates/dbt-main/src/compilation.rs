@@ -3105,6 +3105,8 @@ async fn create_run_cache_state_selector_args(
         project_id,
         macros: resolved_state.macros.macros.clone(),
         project_root: DbtPath::from(project_root),
+        compare_unrendered_code: lifecycle.compare_unrendered_code_default(),
+        runtime_config: resolved_state.runtime_config.clone(),
         shared_event_order: SharedEventOrder::new(),
     }))
 }
