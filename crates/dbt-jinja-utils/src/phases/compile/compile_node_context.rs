@@ -4,8 +4,8 @@ use chrono::TimeZone;
 use chrono_tz::{Europe::London, Tz};
 use dbt_adapter::{AdapterType, load_store::ResultStore};
 use dbt_common::io_args::StaticAnalysisKind;
-use dbt_common::serde_utils::convert_yml_to_dash_map;
-use dbt_common::{FsResult, dashmap::DashMap};
+use dbt_common::serde_utils::convert_yml_to_scc_map;
+use dbt_common::{FsResult, collections::SccHashMap};
 use dbt_schemas::schemas::InternalDbtNode;
 use dbt_schemas::{
     schemas::{InternalDbtNodeAttributes, common::DbtMaterialization, telemetry::NodeType},
@@ -131,7 +131,7 @@ pub fn build_compile_node_context<T>(
     ref_validation_config: DependencyValidationConfig,
 ) -> FsResult<(
     BTreeMap<String, MinijinjaValue>,
-    Arc<DashMap<String, MinijinjaValue>>,
+    Arc<SccHashMap<String, MinijinjaValue>>,
 )>
 where
     T: InternalDbtNodeAttributes + ?Sized,
@@ -160,7 +160,7 @@ pub fn build_compile_node_context_inner<T>(
     ref_validation_config: DependencyValidationConfig,
 ) -> FsResult<(
     BTreeMap<String, MinijinjaValue>,
-    Arc<DashMap<String, MinijinjaValue>>,
+    Arc<SccHashMap<String, MinijinjaValue>>,
 )>
 where
     T: InternalDbtNodeAttributes + ?Sized,
@@ -266,7 +266,7 @@ where
         ))
         .into_value(),
     };
-    let config_map = Arc::new(convert_yml_to_dash_map(model.serialized_config()));
+    let config_map = Arc::new(convert_yml_to_scc_map(model.serialized_config()));
 
     // Get valid config keys based on resource type
     let valid_keys = match model.resource_type() {

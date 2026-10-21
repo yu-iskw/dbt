@@ -238,7 +238,7 @@ impl PluginTask {
                 (NodeStatus::Errored, None, Some(message))
             }
         };
-        ctx.inner.run_stats.insert(
+        ctx.inner.run_stats.upsert_sync(
             unique_id.clone(),
             Stat::new(
                 unique_id,
