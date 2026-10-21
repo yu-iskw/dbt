@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use dbt_common::tracing::formatters::duration::format_duration_fixed_width;
-use dbt_common::tracing::formatters::node::{format_node_action, format_node_type_fixed_width};
+use dbt_common::tracing::formatters::duration::FixedWidthDuration;
+use dbt_common::tracing::formatters::node::{NodeAction, NodeTypeFixedWidth};
 
 use dbt_adapter::load_store::ResultStore;
 use dbt_adapter::{
@@ -28,7 +28,7 @@ use dbt_common::{
     io_args::{DisplayFormat, EvalArgs, ListOutputFormat, Phases, ShowOptions, SystemArgs},
     node_selector::IndirectSelection,
     path::get_target_write_path,
-    pretty_string::{GREEN, RED, color_quotes},
+    pretty_string::{ColoredQuotes, GREEN, RED},
     stdfs,
     tracing::{
         dbt_emit::{
@@ -209,7 +209,7 @@ pub async fn setup_and_execute_fs(
         eprintln!(
             "{} {}",
             RED.apply_to(format!("[{ERROR}]")),
-            color_quotes(e.pretty().as_str())
+            ColoredQuotes(e.pretty().as_str())
         );
         FsError::exit_with_status(1)
     })?;
@@ -1433,7 +1433,7 @@ impl<'a> AllPhasesExecutor<'a> {
                         // through `NodeProcessed` -- borrowing the formatting is what
                         // keeps them from looking like a different program's output.
                         //
-                        // The verdict comes from `format_node_action` rather than a
+                        // The verdict comes from `NodeAction` rather than a
                         // local match, so a check's label and colour are a test's by
                         // construction: green Passed, yellow Warned, red Failed. The
                         // file and JSON layers strip ANSI from message bodies, so
@@ -1454,16 +1454,19 @@ impl<'a> AllPhasesExecutor<'a> {
                         };
                         emit_info_log_message(format!(
                             "{} [{}] {} {}",
-                            format_node_action(
-                                outcome,
+                            NodeAction {
+                                node_outcome: outcome,
                                 skip_reason,
                                 test_outcome,
-                                None,
-                                false,
-                                true
-                            ),
-                            format_duration_fixed_width(Duration::from_secs_f64(r.execution_time)),
-                            format_node_type_fixed_width("check", true),
+                                freshness_outcome: None,
+                                has_warn: false,
+                                colorize: true,
+                            },
+                            FixedWidthDuration(Duration::from_secs_f64(r.execution_time)),
+                            NodeTypeFixedWidth {
+                                node_type: "check",
+                                colorize: true,
+                            },
                             r.name,
                         ));
 
