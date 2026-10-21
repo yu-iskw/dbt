@@ -677,6 +677,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "9d6a67e4bd81850815ef7cbcc3ce321310e96dfb8ddc12f5c59ee65126fc34a9",
     ),
     (
+        ("dbt", "apple-darwin", "aarch64", "0.4.0+dbt0.1.14.g6611400"),
+        "683fc912bddb4fec3efd403e3a341654a5249005273519945d15e67f8dd8c35b",
+    ),
+    (
         ("dbt", "apple-darwin", "aarch64", "0.4.0+dbt0.1.2.gd85701a"),
         "09e99a6d365bd5549cafc35a48e151551938668fdb6988a6df31a0f17d5a2d70",
     ),
@@ -727,6 +731,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
     (
         ("dbt", "apple-darwin", "x86_64", "0.4.0+dbt0.1.13.g2679dc0"),
         "001efa55df3504d9345009f38ce5127169fa598f7514484c9587ab8ffea8195d",
+    ),
+    (
+        ("dbt", "apple-darwin", "x86_64", "0.4.0+dbt0.1.14.g6611400"),
+        "5d152a0a3cf70e1577a8de8e1989ea19e15bf4b8ce5ed2d80fb7ee72eedc79ae",
     ),
     (
         ("dbt", "apple-darwin", "x86_64", "0.4.0+dbt0.1.2.gd85701a"),
@@ -781,6 +789,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "c1a5875ebd89fe354809309579f7c9ed92090e065b5dbaa972ee9abc9d74a5b7",
     ),
     (
+        ("dbt", "manylinux_2_28-linux-gnu", "aarch64", "0.4.0+dbt0.1.14.g6611400"),
+        "2010e8486245695ad2dcd9310a4451bcf140e7c755e341793f8ecbedc15a1a33",
+    ),
+    (
         ("dbt", "manylinux_2_28-linux-gnu", "aarch64", "0.4.0+dbt0.1.2.gd85701a"),
         "0c4eebb307a2bd35d269848e327d5a78aaabcbf0b7938969c39add7c94d02a1f",
     ),
@@ -833,6 +845,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
         "2fd78d20bf1cfe93ce917ca8814bc4a5d1a56786d0fbdab4979219add27b1763",
     ),
     (
+        ("dbt", "manylinux_2_28-linux-gnu", "x86_64", "0.4.0+dbt0.1.14.g6611400"),
+        "01b8fb0aa6f34984ce87922291703f77b1abd84d145b0dd4d783348a5488b175",
+    ),
+    (
         ("dbt", "manylinux_2_28-linux-gnu", "x86_64", "0.4.0+dbt0.1.2.gd85701a"),
         "c0681921eb23ac203d50ffebfde527f46ca8632b9b73b716f4fb67bd65eb31e6",
     ),
@@ -883,6 +899,10 @@ pub static SORTED_CDN_DRIVER_CHECKSUMS: &[(
     (
         ("dbt", "pc-windows-msvc", "x86_64", "0.4.0+dbt0.1.13.g2679dc0"),
         "1db3fd52604dc42c6e373af2892a04cc06a9a63457e0e27ffbc59d1defc3642a",
+    ),
+    (
+        ("dbt", "pc-windows-msvc", "x86_64", "0.4.0+dbt0.1.14.g6611400"),
+        "b6917071867ae9d2e31d19e9ac84bcec79a952f71fbc23108999eb78a8fa5545",
     ),
     (
         ("dbt", "pc-windows-msvc", "x86_64", "0.4.0+dbt0.1.2.gd85701a"),
