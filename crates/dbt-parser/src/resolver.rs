@@ -71,9 +71,7 @@ use crate::resolve::resolve_macros::resolve_macros;
 use crate::resolve::resolve_macros::typecheck_macros;
 use crate::resolve::resolve_metrics::resolve_metrics;
 use crate::resolve::resolve_models::resolve_models;
-use crate::resolve::resolve_plugins::{
-    PluginNodeContext, ResolvedPluginNodes, resolve_plugin_entries, resolve_plugin_paths,
-};
+use crate::resolve::resolve_plugins::{PluginNodeContext, ResolvedPluginNodes, resolve_plugins};
 use crate::resolve::resolve_properties;
 use crate::resolve::resolve_properties::resolve_minimal_properties;
 use crate::resolve::resolve_saved_queries::resolve_saved_queries;
@@ -1074,12 +1072,12 @@ pub async fn resolve_inner(
         base_ctx: &base_ctx,
     };
     let mut plugin_nodes = ResolvedPluginNodes::default();
-    for plugin in &plugins.on {
-        if let Some(entries) = min_properties.plugins.get_mut(plugin.plugin_type()) {
-            resolve_plugin_entries(&plugin_ctx, plugin.as_ref(), entries, &mut plugin_nodes)?;
-        }
-    }
-    resolve_plugin_paths(&plugin_ctx, plugins, &mut plugin_nodes)?;
+    resolve_plugins(
+        &plugin_ctx,
+        plugins,
+        &mut min_properties.plugins,
+        &mut plugin_nodes,
+    )?;
     nodes.plugins.extend(plugin_nodes.enabled);
     disabled_nodes.plugins.extend(plugin_nodes.disabled);
 

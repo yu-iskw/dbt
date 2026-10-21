@@ -10,11 +10,8 @@ use dbt_common::tracing::dbt_emit::{
 };
 use dbt_common::{ErrorCode, FsResult, fs_err};
 use dbt_jinja_utils::jinja_environment::JinjaEnv;
-use dbt_jinja_utils::serde::into_typed_with_jinja;
-use dbt_jinja_utils::utils::dependency_package_name_from_ctx;
 use dbt_schemas::schemas::common::DbtChecksum;
 use dbt_schemas::schemas::project::{PluginNodeConfig, Tags};
-use dbt_schemas::schemas::properties::PluginNodeProperties;
 use dbt_schemas::schemas::serde::StringOrArrayOfStrings;
 use dbt_schemas::schemas::{
     CommonAttributes, DbtPluginNode, DbtPluginNodeAttr, NodeBaseAttributes,
@@ -26,7 +23,7 @@ use super::resolve_exposures::resolve_yaml_depends_on;
 use super::resolve_properties::MinimalPropertiesEntry;
 use crate::args::ResolveArgs;
 use crate::plugin::{
-    ActivePlugins, PluginDiagnostics, PluginEntry, PluginFile, PluginNodeDef, ResolvePlugin,
+    ActivePlugins, PluginDiagnostics, PluginEntry, PluginFile, PluginNodeDef, PluginPackage,
 };
 use crate::utils::get_node_fqn;
 
@@ -66,150 +63,35 @@ impl ResolvedPluginNodes {
     }
 }
 
-/// Resolves a package's entries under `plugins: <plugin type>:` into `plugin`'s nodes.
+/// Resolves a package's plugin nodes: each plugin that is on gets the package's entries under its
+/// keys in properties files and its files under `plugin-paths`, all at once.
 ///
-/// An entry the plugin rejects, or two with the same name, is reported and gets no node.
-pub(crate) fn resolve_plugin_entries(
-    ctx: &PluginNodeContext<'_>,
-    plugin: &dyn ResolvePlugin,
-    entries: &mut BTreeMap<String, MinimalPropertiesEntry>,
-    nodes: &mut ResolvedPluginNodes,
-) -> FsResult<()> {
-    let plugin_type = plugin.plugin_type();
-    let package_name = ctx.package.dbt_project.name.as_str();
-    let dependency_package_name = dependency_package_name_from_ctx(ctx.env, ctx.base_ctx);
-    for (name, mpe) in entries.iter_mut() {
-        if mpe.schema_value.is_null() {
-            continue;
-        }
-        if !mpe.duplicate_paths.is_empty() {
-            let paths = std::iter::once(&mpe.relative_path)
-                .chain(&mpe.duplicate_paths)
-                .map(|path| path.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            emit_error_log_from_fs_error(*fs_err!(
-                code => ErrorCode::InvalidConfig,
-                loc => mpe.relative_path.clone(),
-                "There is more than one {plugin_type} named '{name}' in package '{package_name}': {paths}"
-            ));
-            continue;
-        }
-
-        let schema_value = std::mem::replace(&mut mpe.schema_value, dbt_yaml::Value::null());
-        // The checksum covers the whole entry, as written.
-        let checksum = DbtChecksum::hash(
-            dbt_yaml::to_string(&schema_value)
-                .unwrap_or_default()
-                .as_bytes(),
-        );
-        let properties: PluginNodeProperties = into_typed_with_jinja(
-            schema_value,
-            false,
-            ctx.env,
-            ctx.base_ctx,
-            &[],
-            dependency_package_name,
-            true,
-        )?;
-
-        let entry = PluginEntry {
-            name,
-            package_name,
-            path: &mpe.relative_path,
-            properties: &properties.__additional_properties__,
-        };
-        let mut diagnostics = PluginDiagnostics::default();
-        let resolved = plugin.resolve_entry(&entry, &mut diagnostics);
-        report(plugin_type, diagnostics);
-        let data = match resolved {
-            Ok(data) => data,
-            Err(error) => {
-                emit_error_log_from_fs_error(
-                    *error.into_fs_error(plugin_type, ErrorCode::PluginError),
-                );
-                continue;
-            }
-        };
-
-        let config = properties.config.unwrap_or_default();
-        let def = PluginNodeDef {
-            name: name.clone(),
-            path: mpe.relative_path.clone(),
-            description: properties.description,
-            enabled: config.enabled.unwrap_or(true),
-            tags: config.tags.into_inner().map(Into::into).unwrap_or_default(),
-            meta: config.meta.unwrap_or_default(),
-            depends_on: properties
-                .depends_on
-                .unwrap_or_default()
-                .into_iter()
-                .chain(data.depends_on)
-                .collect(),
-            data: data.data,
-        };
-        nodes.insert(plugin_node(ctx, plugin_type, def, checksum)?);
-    }
-    Ok(())
-}
-
-/// Resolves the files under a package's `plugin-paths` into its plugins' nodes.
-///
-/// A path that names no reserved plugin, or a plugin that is off, is ignored with a warning. A
-/// path that overlaps one dbt reads, or another plugin's, is an error.
-pub(crate) fn resolve_plugin_paths(
+/// Two entries under the same key with the same name are reported, and neither reaches the
+/// plugin. A node the plugin defines twice is reported and gets no second node.
+pub(crate) fn resolve_plugins(
     ctx: &PluginNodeContext<'_>,
     plugins: &ActivePlugins,
+    properties: &mut BTreeMap<String, BTreeMap<String, MinimalPropertiesEntry>>,
     nodes: &mut ResolvedPluginNodes,
 ) -> FsResult<()> {
-    let project = &ctx.package.dbt_project;
-    let Some(plugin_paths) = &project.plugin_paths else {
-        return Ok(());
-    };
-    let package_name = project.name.as_str();
-    let dbt_paths = project.all_dbt_paths();
-    let claims = Claims::new(&dbt_paths, plugin_paths);
-    for (plugin_type, paths) in plugin_paths {
-        if !plugins.is_reserved(plugin_type) {
-            emit_warn_log_message(
-                ErrorCode::UnknownPlugin,
-                format!(
-                    "Ignoring `plugin-paths: {plugin_type}` in package '{package_name}': there \
-                     is no `{plugin_type}` plugin"
-                ),
-            );
-            continue;
-        }
-        let Some(plugin) = plugins.of_type(plugin_type) else {
-            emit_warn_log_message(
-                ErrorCode::PluginNotEnabled,
-                format!(
-                    "Ignoring `plugin-paths: {plugin_type}` in package '{package_name}': {}",
-                    plugins.why_ignored(plugin_type)
-                ),
-            );
-            continue;
-        };
+    let package_name = ctx.package.dbt_project.name.as_str();
+    let mut files = plugin_path_files(ctx, plugins)?;
+    for plugin in &plugins.on {
         let plugin_type = plugin.plugin_type();
-
-        let mut files = Vec::new();
-        for path in paths {
-            if let Some(other) = claims.overlap(plugin_type, path) {
-                emit_error_log_from_fs_error(*fs_err!(
-                    ErrorCode::PluginPathOverlap,
-                    "`plugin-paths: {plugin_type}` in package '{package_name}' has '{path}', \
-                     which overlaps '{other}'. A plugin's paths can't overlap a path dbt reads \
-                     or another plugin's."
-                ));
-                continue;
-            }
-            if let Some(dir) = contained_dir(ctx.package, plugin_type, path) {
-                collect_files(&ctx.package.package_root_path, &dir, &mut files)?;
+        let mut entries = BTreeMap::new();
+        for key in std::iter::once(plugin_type).chain(plugin.definition_keys().iter().copied()) {
+            if let Some(by_name) = properties.remove(key) {
+                entries.insert(key, plugin_entries(key, package_name, by_name));
             }
         }
-
+        let package = PluginPackage {
+            package_name,
+            entries,
+            files: files.remove(plugin_type).unwrap_or_default(),
+            jinja: Some((ctx.env, ctx.base_ctx)),
+        };
         let mut diagnostics = PluginDiagnostics::default();
-        let defs = plugin.resolve_files(&files, &mut diagnostics);
+        let defs = plugin.resolve(&package, &mut diagnostics);
         report(plugin_type, diagnostics);
         let defs = match defs {
             Ok(defs) => defs,
@@ -240,6 +122,104 @@ pub(crate) fn resolve_plugin_paths(
         }
     }
     Ok(())
+}
+
+/// The entries under one key, reporting names that appear more than once.
+fn plugin_entries(
+    key: &str,
+    package_name: &str,
+    by_name: BTreeMap<String, MinimalPropertiesEntry>,
+) -> Vec<PluginEntry> {
+    let mut entries = Vec::new();
+    for (name, mpe) in by_name {
+        if mpe.schema_value.is_null() {
+            continue;
+        }
+        if !mpe.duplicate_paths.is_empty() {
+            let paths = std::iter::once(&mpe.relative_path)
+                .chain(&mpe.duplicate_paths)
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            emit_error_log_from_fs_error(*fs_err!(
+                code => ErrorCode::InvalidConfig,
+                loc => mpe.relative_path.clone(),
+                "There is more than one {key} named '{name}' in package '{package_name}': {paths}"
+            ));
+            continue;
+        }
+        entries.push(PluginEntry {
+            name,
+            path: mpe.relative_path,
+            value: mpe.schema_value,
+        });
+    }
+    entries
+}
+
+/// The files under a package's `plugin-paths`, by plugin type.
+///
+/// A path that names no reserved plugin, or a plugin that is off, is ignored with a warning. A
+/// path that overlaps one dbt reads, or another plugin's, is an error.
+fn plugin_path_files(
+    ctx: &PluginNodeContext<'_>,
+    plugins: &ActivePlugins,
+) -> FsResult<BTreeMap<&'static str, Vec<PluginFile>>> {
+    let mut files_by_type = BTreeMap::new();
+    let project = &ctx.package.dbt_project;
+    let Some(plugin_paths) = &project.plugin_paths else {
+        return Ok(files_by_type);
+    };
+    let package_name = project.name.as_str();
+    let dbt_paths = project.all_dbt_paths();
+    let claims = Claims::new(&dbt_paths, plugin_paths);
+    for (plugin_type, paths) in plugin_paths {
+        if !plugins.is_reserved(plugin_type) {
+            emit_warn_log_message(
+                ErrorCode::UnknownPlugin,
+                format!(
+                    "Ignoring `plugin-paths: {plugin_type}` in package '{package_name}': there \
+                     is no `{plugin_type}` plugin"
+                ),
+            );
+            continue;
+        }
+        let Some(plugin) = plugins.of_type(plugin_type) else {
+            let why = match plugins.reading(plugin_type) {
+                Some(reader) => format!(
+                    "`{plugin_type}` isn't a plugin type, only a key the `{}` plugin reads \
+                     under `plugins:`",
+                    reader.plugin_type()
+                ),
+                None => plugins.why_ignored(plugin_type),
+            };
+            emit_warn_log_message(
+                ErrorCode::PluginNotEnabled,
+                format!(
+                    "Ignoring `plugin-paths: {plugin_type}` in package '{package_name}': {why}"
+                ),
+            );
+            continue;
+        };
+        let plugin_type = plugin.plugin_type();
+
+        let files = files_by_type.entry(plugin_type).or_insert_with(Vec::new);
+        for path in paths {
+            if let Some(other) = claims.overlap(plugin_type, path) {
+                emit_error_log_from_fs_error(*fs_err!(
+                    ErrorCode::PluginPathOverlap,
+                    "`plugin-paths: {plugin_type}` in package '{package_name}' has '{path}', \
+                     which overlaps '{other}'. A plugin's paths can't overlap a path dbt reads \
+                     or another plugin's."
+                ));
+                continue;
+            }
+            if let Some(dir) = contained_dir(ctx.package, plugin_type, path) {
+                collect_files(&ctx.package.package_root_path, &dir, files)?;
+            }
+        }
+    }
+    Ok(files_by_type)
 }
 
 /// The paths a package's dbt paths and `plugin-paths` claim, normalized, by who claims them:
