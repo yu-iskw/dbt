@@ -518,7 +518,9 @@ async fn do_execute_fs(
         let command_name = feature_stack.cli.command_name;
         emit_info_progress_message(ProgressMessage::new_from_action_and_target(
             command_name.to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
+            option_env!("DBT_VERSION")
+                .unwrap_or(env!("CARGO_PKG_VERSION"))
+                .to_string(),
         ));
 
         return match execute_deps_command(
@@ -542,7 +544,9 @@ async fn do_execute_fs(
         let command_name = feature_stack.cli.command_name;
         emit_info_progress_message(ProgressMessage::new_from_action_and_target(
             command_name.to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
+            option_env!("DBT_VERSION")
+                .unwrap_or(env!("CARGO_PKG_VERSION"))
+                .to_string(),
         ));
 
         return execute_clean_command(eval_arg, &clean_args.files, token).await;
