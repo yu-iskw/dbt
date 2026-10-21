@@ -3157,7 +3157,7 @@ impl AdapterImpl {
         }
 
         match self.adapter_type() {
-            Postgres | Bigquery | DuckDB | LakeCompute | Exasol => {
+            Postgres | Bigquery | DuckDB | LakeCompute | Exasol | ClickHouse => {
                 let grantee_cols = record_batch.column_values::<StringArray>("grantee")?;
                 let privilege_cols = record_batch.column_values::<StringArray>("privilege_type")?;
 
@@ -3351,8 +3351,8 @@ impl AdapterImpl {
 
                 Ok(result)
             }
-            Salesforce | Spark | Fabric | ClickHouse | Starburst | Athena | Trino | Datafusion
-            | Dremio | Oracle => {
+            Salesforce | Spark | Fabric | Starburst | Athena | Trino | Datafusion | Dremio
+            | Oracle => {
                 unimplemented!("grants not implemented")
             }
         }
