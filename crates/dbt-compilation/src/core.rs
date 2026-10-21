@@ -659,28 +659,7 @@ impl DbtLoadedProject {
                     )
                 })?
                 .1;
-            // `lake_compute`, when configured as a secondary (non-default) adapter,
-            // inherits `database`/`schema` from the default adapter instead of
-            // requiring its own. `threads` is already shared across every adapter
-            // via the `threads` parameter passed to `build_adapter` below, so it
-            // needs no handling here. See fs#13653.
-            let resolved_config = if let DbConfig::LakeCompute(lake_compute) = matched_config {
-                let mut lake_compute = lake_compute.clone();
-                if lake_compute.database.is_none() || lake_compute.schema.is_none() {
-                    let default_config = configs
-                        .iter()
-                        .find(|(t, _)| *t == default_adapter)
-                        .map(|(_, c)| c);
-                    if lake_compute.database.is_none() {
-                        lake_compute.database =
-                            default_config.and_then(|c| c.get_database().cloned());
-                    }
-                    if lake_compute.schema.is_none() {
-                        lake_compute.schema = default_config.and_then(|c| c.get_schema().cloned());
-                    }
-                }
-                DbConfig::LakeCompute(lake_compute)
-            } else if let DbConfig::Snowflake(snowflake) = matched_config {
+            let resolved_config = if let DbConfig::Snowflake(snowflake) = matched_config {
                 // dbt-auth has no notion of self_signed_jwt; the connection
                 // it builds is identical to keypair's either way.
                 let mut snowflake = snowflake.clone();
