@@ -61,6 +61,12 @@ fusion_tests:
       # FUSION_SLT_WAREHOUSE and DBT_TESTING, so use one of them.
       warehouse: FUSION_ADAPTER_TESTING
       schema: fusion_tests_schema
+    bigquery:
+      type: bigquery
+      method: service-account
+      keyfile: /path/to/keyfile.json
+      database: dbt-test-env
+      schema: fusion_tests_schema
     clickhouse:
       type: clickhouse
       host: localhost
@@ -88,7 +94,8 @@ The `schema` is replaced per test.
 When recording, each test:
 
 1. runs its commands in a fresh schema named `<test_name>___<timestamp>___`,
-2. drops that schema afterwards,
+2. drops that schema afterwards (only that one: anything a test creates in another
+   schema is left behind, so drop it yourself),
 3. rewrites the schema name in the recordings to `<test_name>`, which is the
    schema replay runs in.
 

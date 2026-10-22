@@ -4,4 +4,5 @@
 //! `tests/data/repros/<repro>/`, so the bug stays fixed. Link the issue in the
 //! test's doc comment. Tests of adapter methods and features go in `adapter`.
 
+pub mod bigquery;
 pub mod snowflake;

@@ -5,5 +5,6 @@
 //! usually shared by every adapter that supports it. Regression tests for
 //! reported bugs go in `repros`.
 
+pub mod bigquery;
 pub mod clickhouse;
 pub mod snowflake;
