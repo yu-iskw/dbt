@@ -594,22 +594,19 @@ pub async fn resolve_data_tests(
         validate_compute(test_config.compute, &dbt_asset.path)?;
 
         let test_asset = test_path_to_test_asset.get(&dbt_asset.path);
-        // Match dbt-core's _lookup_attached_node: source tests get no attached_node;
-        // model/seed/snapshot tests get the parent's unique_id (with .v<version> for
-        // versioned models).
-        let attached_node = test_asset.and_then(|ta| {
-            if ta.resource_type == "source" {
-                None
-            } else {
-                Some(format_node_unique_id(
-                    &ta.resource_type,
-                    &ta.dbt_asset.package_name,
-                    &ta.resource_name,
-                    None,
-                    ta.version.as_deref(),
-                ))
-            }
+        let test_subject_unique_id = test_asset.map(|ta| {
+            format_node_unique_id(
+                &ta.resource_type,
+                &ta.dbt_asset.package_name,
+                &ta.resource_name,
+                ta.source_name.as_deref(),
+                ta.version.as_deref(),
+            )
         });
+        // Match dbt-core's _lookup_attached_node: source tests get no attached_node.
+        let attached_node = test_asset
+            .filter(|ta| ta.resource_type != "source")
+            .and_then(|_| test_subject_unique_id.clone());
 
         // A test runs where its subject runs, so an unset `+adapter` is inherited
         // from `attached_node` -- the same lookup the `group` inheritance below
@@ -819,6 +816,7 @@ pub async fn resolve_data_tests(
                 DbtTestAttr {
                     column_name: test_asset.and_then(|ta| ta.column_name.clone()),
                     attached_node,
+                    test_subject_unique_id,
                     test_metadata: inferred_test_metadata.clone(),
                     file_key_name: test_asset.and_then(|ta| file_key_name_from_asset(ta)),
                     introspection: IntrospectionKind::None,

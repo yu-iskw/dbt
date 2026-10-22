@@ -1294,6 +1294,7 @@ pub fn nodes_from_dbt_manifest(manifest: DbtManifest, dbt_quoting: DbtQuoting) -
                         __test_attr__: DbtTestAttr {
                             column_name: test.column_name,
                             attached_node: test.attached_node,
+                            test_subject_unique_id: None,
                             test_metadata: test.test_metadata,
                             file_key_name: test.file_key_name,
                             introspection: IntrospectionKind::None,

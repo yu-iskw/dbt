@@ -1631,6 +1631,7 @@ mod tests {
                         __test_attr__: DbtTestAttr {
                             column_name: None,
                             attached_node: None,
+                            test_subject_unique_id: None,
                             test_metadata: None,
                             file_key_name: None,
                             introspection: IntrospectionKind::None,
