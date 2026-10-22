@@ -1171,7 +1171,7 @@ fn build_parent_and_child_maps(
     (parent_map, child_map)
 }
 
-pub fn nodes_from_dbt_manifest(manifest: DbtManifest, dbt_quoting: DbtQuoting) -> Nodes {
+pub fn nodes_from_dbt_manifest(mut manifest: DbtManifest, dbt_quoting: DbtQuoting) -> Nodes {
     let mut nodes = Nodes::default();
 
     let adapter_type =
@@ -1199,7 +1199,7 @@ pub fn nodes_from_dbt_manifest(manifest: DbtManifest, dbt_quoting: DbtQuoting) -
     };
 
     // Do not put disabled nodes into the nodes, because all things in Nodes object should be enabled.
-    for (unique_id, node) in manifest.nodes.clone() {
+    for (unique_id, node) in std::mem::take(&mut manifest.nodes) {
         match node {
             DbtNode::Model(model) => {
                 nodes.models.insert(

@@ -452,7 +452,7 @@ impl TaskRunner {
 
         let schemas_option = Some(schemas.clone());
         let database_schemas_option = Some(database_schemas);
-        let results_option = Some(results.clone());
+        let results_option = Some(results);
 
         // on-run-end hook results, recorded as `operation.<project>.<name>` nodes and
         // merged into the run stats below.

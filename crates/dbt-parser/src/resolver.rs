@@ -510,7 +510,7 @@ pub async fn resolve(
             operations,
             dbt_profile: dbt_state.dbt_profile.clone(),
             cloud_config: dbt_state.cloud_config.clone(),
-            render_results: collector,
+            render_results: Arc::new(collector),
             run_started_at: dbt_state.run_started_at,
             nodes_with_resolution_errors,
             nodes_with_access_errors,

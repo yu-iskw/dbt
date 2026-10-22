@@ -48,7 +48,7 @@ pub fn handle_render_result(
         || unique_id.starts_with("test.")
     {
         let node_info = dbt_tasks_core::context::RenderedNodeInfo {
-            sql: sql_instruction.sql.clone(),
+            sql: sql_instruction.sql.as_str().into(),
             materialization: materialization.clone(),
         };
         ctx.inner

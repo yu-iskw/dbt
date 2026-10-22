@@ -252,7 +252,7 @@ pub(super) fn rendered_sql_for(
 ) -> FsResult<String> {
     ctx.inner
         .rendered_sql
-        .read_sync(unique_id, |_, info| info.sql.clone())
+        .read_sync(unique_id, |_, info| info.sql.to_string())
         .ok_or_else(|| {
             dbt_common::fs_err!(
                 ErrorCode::Unexpected,

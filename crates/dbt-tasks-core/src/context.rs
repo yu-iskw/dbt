@@ -159,7 +159,7 @@ impl RunCachePrefetchState {
 /// Information about a rendered node, used for unit test hash computation.
 #[derive(Debug, Clone)]
 pub struct RenderedNodeInfo {
-    pub sql: String,
+    pub sql: Arc<str>,
     pub materialization: DbtMaterialization,
 }
 
