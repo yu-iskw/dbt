@@ -83,7 +83,7 @@ pub const DUCKDB_EXTENDED_DRIVER_VERSION: &str = "0.21.0.dev+dbt0.0.34";
 pub const LAKE_COMPUTE_DRIVER_VERSION: &str = "0.4.0+dbt0.1.14.g6611400";
 pub const CLICKHOUSE_DRIVER_VERSION: &str = "0.1.1";
 pub const SALESFORCE_DRIVER_VERSION: &str = "0.21.0.dev+dbt0.22.1";
-pub const SPARK_DRIVER_VERSION: &str = "0.21.0.dev+dbt0.1.3";
+pub const SPARK_DRIVER_VERSION: &str = "0.21.0.dev+dbt0.1.4";
 pub const MSSQLSERVER_DRIVER_VERSION: &str = "1.3.1";
 pub const EXASOL_DRIVER_VERSION: &str = "0.9.0";
 
