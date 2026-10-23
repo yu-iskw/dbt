@@ -280,6 +280,10 @@ pub async fn setup_and_execute_fs(
             Err(_) => "error",
         };
         ctx.write(status);
+        // The row for this invocation only exists now, so any index or
+        // information schema written during the command is missing it. Bring
+        // that one table up to date.
+        refresh_invocation_artifacts(&eval_arg);
     }
 
     // Shutdown must be called to ensure vortex flushes all events.
@@ -330,6 +334,53 @@ is false. This should not happen."
             error,
             artifacts: artifacts_sink,
         }),
+    }
+}
+
+/// Re-materialize the invocations table in whichever artifacts were requested,
+/// once the current invocation's record has been written.
+///
+/// `--write-index` and `--generate-info-schema` both produce their output while
+/// the command is still running, and [`InvocationContext::write`] only appends
+/// the row for that command after it returns. Without this pass the invocation
+/// that produced an artifact is the one invocation missing from it, so joining
+/// `dbt_rt.run_results` to `dbt_rt.invocations` — as `dbt_rt.dag_validity` does —
+/// silently drops the run that was just recorded.
+///
+/// The two artifacts are refreshed independently, each from the metadata
+/// epochs: the information schema does not read the index, matching the write
+/// it is catching up. Each refresh no-ops when its artifact was not actually
+/// written — a command that failed, was interrupted, or never reached the write
+/// leaves nothing to bring up to date.
+///
+/// Advisory, like the writes themselves: a failure here leaves the rest of the
+/// artifact usable and must not fail the command.
+fn refresh_invocation_artifacts(eval_arg: &EvalArgs) {
+    let metadata_dir = eval_arg.metadata_dir();
+    if !metadata_dir.exists() {
+        return;
+    }
+
+    if eval_arg.generate_info_schema
+        && let Err(err) =
+            dbt_index_core::refresh_invocations(&metadata_dir, &eval_arg.info_schema_dir())
+    {
+        emit_warn_log_message(
+            ErrorCode::InfoSchemaWriteFailed,
+            format!("dbt: generate-info-schema: refreshing dbt_rt.invocations: {err}"),
+        );
+    }
+
+    if eval_arg.write_index {
+        let index_dir = eval_arg.index_dir();
+        if has_persisted_state(&index_dir)
+            && let Err(err) = dbt_index_core::ingest::rewrite_invocations(&metadata_dir, &index_dir)
+        {
+            emit_warn_log_message(
+                ErrorCode::IndexWriteFailed,
+                format!("dbt-index: refreshing dbt_rt.invocations: {err}"),
+            );
+        }
     }
 }
 
