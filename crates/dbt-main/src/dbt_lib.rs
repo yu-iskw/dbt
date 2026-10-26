@@ -1540,12 +1540,12 @@ impl<'a> AllPhasesExecutor<'a> {
                                 test_outcome,
                                 freshness_outcome: None,
                                 has_warn: false,
-                                colorize: true,
+                                colorize: console::colors_enabled(),
                             },
                             FixedWidthDuration(Duration::from_secs_f64(r.execution_time)),
                             NodeTypeFixedWidth {
                                 node_type: "check",
-                                colorize: true,
+                                colorize: console::colors_enabled(),
                             },
                             r.name,
                         ));
