@@ -88,8 +88,7 @@ async fn write_metadata_impl(
     mut report: Option<&mut MetadataWriteReport>,
 ) -> FsResult<()> {
     if let Some(catalog) = catalog_data {
-        write_catalog_stats_parquet(catalog, arg).await;
-        write_catalog_columns_epoch(catalog, arg);
+        write_catalog_epochs(catalog, arg).await;
     }
 
     let grain_infos = index_hooks.lineage_grain_infos(run_task_results).await?;
@@ -300,6 +299,12 @@ fn record_metadata_errors(
             errors.join("; "),
         );
     }
+}
+
+/// Writes the `catalog/columns` and `run/catalog_stats` epochs from a fetched catalog.
+pub(crate) async fn write_catalog_epochs(catalog: &DbtCatalog, arg: &EvalArgs) {
+    write_catalog_stats_parquet(catalog, arg).await;
+    write_catalog_columns_epoch(catalog, arg);
 }
 
 fn write_catalog_columns_epoch(catalog: &DbtCatalog, arg: &EvalArgs) {
