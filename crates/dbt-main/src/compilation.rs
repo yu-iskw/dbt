@@ -551,6 +551,7 @@ impl<'a> CompilationPhasesExecutor<'a> {
                 None,
                 None,
                 None,
+                None,
                 &empty_targets,
                 &empty_grain_infos,
                 &empty_node_classifiers,

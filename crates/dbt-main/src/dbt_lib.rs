@@ -2024,6 +2024,7 @@ impl<'a> AllPhasesExecutor<'a> {
                     .expect("Unconditionally set earlier"),
                 resolved_state.as_ref(),
                 schema_store.as_ref(),
+                type_ops_factory.as_ref(),
                 &run_task_results,
                 catalog_data.as_ref(),
                 self.feature_stack.index.hooks.as_ref(),
