@@ -1855,6 +1855,9 @@ impl<'a> AllPhasesExecutor<'a> {
                 }
             };
 
+        // Tasks are done. Release their freed memory before the artifacts are built.
+        crate::utils::release_free_heap_memory();
+
         let resolved_state = Arc::clone(&run_task_results.resolved_state);
 
         // Prepare artifact

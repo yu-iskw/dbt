@@ -395,6 +395,7 @@ impl<'a> CompilationPhasesExecutor<'a> {
             use_resolver_state_deps: false,
             no_version_check: self.cli.common_args.no_version_check,
             use_full_schema_store: false,
+            release_free_heap_after_parse: true,
         };
         match try_load_prev_compilation(
             &self.arg,
@@ -1066,6 +1067,7 @@ impl DbtProjectCompilation {
             use_resolver_state_deps: false,
             no_version_check: cli.common_args.no_version_check,
             use_full_schema_store: false,
+            release_free_heap_after_parse: true,
         };
         DbtProjectCompilation::initialize(
             feature_stack,
@@ -1116,6 +1118,7 @@ impl DbtProjectCompilation {
             use_resolver_state_deps: false,
             no_version_check: cli.common_args.no_version_check,
             use_full_schema_store: false,
+            release_free_heap_after_parse: true,
         };
 
         let (mut maybe_prev, use_lazy_filter) = if cli.common_args.effective_partial_parse() {
@@ -1390,6 +1393,8 @@ impl DbtProjectCompilation {
             use_resolver_state_deps: true,
             no_version_check: true,
             use_full_schema_store: true,
+            // Incremental recompiles run on every edit and free little.
+            release_free_heap_after_parse: prev_compilation.is_none(),
         };
 
         DbtProjectCompilation::initialize(
@@ -1475,6 +1480,11 @@ impl DbtProjectCompilation {
                 .await?
         };
         token.check_cancellation()?;
+
+        // Parsing is done. Release its freed memory before the artifacts and tasks allocate.
+        if loaded_project.config().release_free_heap_after_parse {
+            crate::utils::release_free_heap_memory();
+        }
 
         feature_stack
             .cli
