@@ -395,6 +395,12 @@ pub enum ErrorCode {
     // Lineage
     InvalidLineageSchema = 3500,
 
+    // --------------------------------------------------------------------------------------------
+    // SQL frontend library
+    /// The SQL frontend library could not be loaded, or does not speak a
+    /// protocol this dbt does.
+    FrontendLibraryUnavailable = 3600,
+
     InvalidDialect = 8998,
     RuntimeError = 8999,
     InvalidUserInput = 8997,
