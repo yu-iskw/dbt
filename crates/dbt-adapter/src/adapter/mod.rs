@@ -4263,6 +4263,19 @@ impl Adapter {
                 self.strip_trailing_statement_terminator(state, args)
             }
             "warn_once" => self.warn_once(state, args),
+            "convert_datetimes_to_strs" => {
+                let iter = ArgsIter::new(name, &["table"], args);
+                let table = iter.next_arg::<Value>()?;
+                iter.finish()?;
+                Ok(table)
+            }
+            "get_binding_char" => {
+                let iter = ArgsIter::new(name, &[], args);
+                iter.finish()?;
+                Ok(Value::from(crate::formatter::binding_char(
+                    self.adapter_type(),
+                )))
+            }
             "get_seed_file_path" => {
                 // model: dict (seed node)
                 let iter = ArgsIter::new(name, &["model"], args);

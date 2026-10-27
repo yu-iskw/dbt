@@ -1057,6 +1057,7 @@ pub struct ManifestSeedConfig {
     pub delimiter: Option<Spanned<String>>,
     #[serde(default, deserialize_with = "bool_or_string_bool")]
     pub all_varchar: Option<bool>,
+    pub fast: Option<bool>,
     pub event_time: Option<String>,
     pub full_refresh: Option<bool>,
     pub group: Option<String>,
@@ -1107,6 +1108,7 @@ impl From<SeedConfig> for ManifestSeedConfig {
             quote_columns: config.quote_columns,
             delimiter: config.delimiter,
             all_varchar: config.all_varchar,
+            fast: config.fast,
             event_time: config.event_time,
             full_refresh: config.full_refresh,
             group: config.group,
@@ -1145,6 +1147,7 @@ impl From<ManifestSeedConfig> for SeedConfig {
             quote_columns: config.quote_columns,
             delimiter: config.delimiter,
             all_varchar: config.all_varchar,
+            fast: config.fast,
             event_time: config.event_time,
             full_refresh: config.full_refresh,
             group: config.group,

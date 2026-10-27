@@ -443,7 +443,7 @@ fn table_materialization_ctas_in_place_for_staged_create_opt_in() {
 
 const SEED_FILE_PATH: &str = "/tmp/jobs/run/seeds/raw_orders.csv";
 
-fn render_load_csv_rows(dbt_version: &str) -> (MacroTestHarness, String) {
+fn render_load_csv_rows(dbt_version: &str, fast: bool) -> (MacroTestHarness, String) {
     let harness = build_harness("iceberg_demo", "ducklake_demo");
     harness
         .mock()
@@ -452,6 +452,15 @@ fn render_load_csv_rows(dbt_version: &str) -> (MacroTestHarness, String) {
         .mock()
         .on("load_dataframe", |_| Ok(Value::UNDEFINED));
     harness.mock().on("add_query", |_| Ok(Value::UNDEFINED));
+    harness
+        .mock()
+        .on("convert_datetimes_to_strs", |args| Ok(args[0].clone()));
+    harness
+        .mock()
+        .on("get_binding_char", |_| Ok(Value::from("?")));
+    harness.mock().on("quote_seed_column", |args| {
+        Ok(args.first().cloned().unwrap_or(Value::UNDEFINED))
+    });
 
     let model = Value::from_serialize(BTreeMap::from([
         ("database", "md_db"),
@@ -469,10 +478,11 @@ fn render_load_csv_rows(dbt_version: &str) -> (MacroTestHarness, String) {
         ),
     ]));
     let config = Arc::new(MockJinjaObject::new());
-    config.on("get", |args| {
+    config.on("get", move |args| {
         let key = args.first().and_then(|v| v.as_str());
         let default = args.get(1).cloned().unwrap_or(Value::UNDEFINED);
         match key {
+            Some("fast") => Ok(Value::from(fast)),
             Some("column_types") => Ok(Value::from_serialize(BTreeMap::from([
                 ("id", "varchar"),
                 ("amount", "decimal(10,2)"),
@@ -504,7 +514,7 @@ fn load_csv_rows_fast_path_calls_load_dataframe() {
     // arguments by position, so this test pins the whole positional contract.
     // The rows and the ingest itself are covered by the Rust tests in
     // `dbt-adapter` (`seed::tests`, `duckdb_seed_ingest_*`).
-    let (harness, rendered) = render_load_csv_rows("2.0.0");
+    let (harness, rendered) = render_load_csv_rows("2.0.0", true);
 
     let calls = harness.mock().observed_calls();
     let load = calls
@@ -535,7 +545,7 @@ fn load_csv_rows_fast_path_calls_load_dataframe() {
 
 #[test]
 fn load_csv_rows_fast_path_keeps_copy_outside_fusion() {
-    let (harness, rendered) = render_load_csv_rows("1.10.0");
+    let (harness, rendered) = render_load_csv_rows("1.10.0", true);
 
     let calls = harness.mock().observed_calls();
     calls.assert_not_called("load_dataframe");
@@ -637,5 +647,26 @@ fn create_csv_table_column_types_win_over_all_varchar() {
     assert!(
         !rendered.contains("bigint"),
         "all_varchar should replace the inferred type, got: {rendered}"
+    );
+}
+
+#[test]
+fn load_csv_rows_without_fast_inserts_in_batches() {
+    let (harness, rendered) = render_load_csv_rows("2.0.0", false);
+
+    let calls = harness.mock().observed_calls();
+    calls.assert_not_called("load_dataframe");
+    let insert = calls
+        .to("add_query")
+        .next()
+        .expect("fast: false should insert through add_query");
+    assert!(
+        insert.args[0].to_string().contains("insert into"),
+        "expected a batched insert, got: {}",
+        insert.args[0]
+    );
+    assert!(
+        rendered.contains("values") && rendered.contains("(?,?)"),
+        "each row should use the adapter's binding char, got: {rendered}"
     );
 }

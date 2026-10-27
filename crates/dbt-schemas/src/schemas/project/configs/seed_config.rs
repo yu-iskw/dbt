@@ -117,6 +117,8 @@ pub struct ProjectSeedConfig {
         deserialize_with = "bool_or_string_bool"
     )]
     pub all_varchar: Option<bool>,
+    #[serde(default, rename = "+fast", deserialize_with = "bool_or_string_bool")]
+    pub fast: Option<bool>,
     #[serde(rename = "+external_volume")]
     pub external_volume: Option<String>,
     #[serde(rename = "+adapter_properties")]
@@ -370,6 +372,7 @@ impl TypedRecursiveConfig for ProjectSeedConfig {
             || self.quoting.is_some()
             || self.delimiter.is_some()
             || self.all_varchar.is_some()
+            || self.fast.is_some()
             || self.external_volume.is_some()
             || self.adapter_properties.is_some()
             || self.base_location_root.is_some()
@@ -472,6 +475,7 @@ pub struct SeedConfig {
     pub delimiter: Option<Spanned<String>>,
     #[serde(default, deserialize_with = "bool_or_string_bool")]
     pub all_varchar: Option<bool>,
+    pub fast: Option<bool>,
     #[serde(default, deserialize_with = "event_time_or_map_to_string")]
     pub event_time: Option<String>,
     pub full_refresh: Option<bool>,
@@ -509,6 +513,7 @@ impl From<ProjectSeedConfig> for SeedConfig {
             quote_columns: config.quote_columns,
             delimiter: config.delimiter,
             all_varchar: config.all_varchar,
+            fast: config.fast,
             event_time: config.event_time,
             full_refresh: config.full_refresh,
             group: config.group,
@@ -681,6 +686,7 @@ impl From<SeedConfig> for ProjectSeedConfig {
             quote_columns: config.quote_columns,
             delimiter: config.delimiter,
             all_varchar: config.all_varchar,
+            fast: config.fast,
             event_time: config.event_time,
             full_refresh: config.full_refresh,
             group: config.group,
