@@ -1,5 +1,3 @@
-extern crate num_cpus;
-
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};

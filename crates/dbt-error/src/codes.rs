@@ -2,8 +2,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use dbt_proc_macros::include_frontend_error_codes;
-use int_enum::IntEnum;
-use strum_macros::{EnumString, IntoStaticStr};
+use strum_macros::{EnumString, FromRepr, IntoStaticStr};
 
 /// Error codes for the SDF CLI.
 ///
@@ -12,7 +11,7 @@ use strum_macros::{EnumString, IntoStaticStr};
 #[include_frontend_error_codes]
 #[repr(u16)]
 #[non_exhaustive]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntEnum, EnumString, IntoStaticStr, Default)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, FromRepr, EnumString, IntoStaticStr, Default)]
 pub enum ErrorCode {
     // ----------------- Frontend errors [0, 999] -----------------------------
     //
@@ -444,6 +443,14 @@ pub enum ErrorCode {
 impl std::hash::Hash for ErrorCode {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         (*self as u16).hash(state)
+    }
+}
+
+impl TryFrom<u16> for ErrorCode {
+    type Error = u16;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        Self::from_repr(value).ok_or(value)
     }
 }
 

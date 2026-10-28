@@ -1,10 +1,10 @@
 use dbt_adapter_engine::cow::{lowercase, uppercase};
 use dbt_adapter_sql::types::{SqlType, StructField};
 use dbt_common::current_function_name;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::borrow::Cow;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 use dbt_adapter_core::*;
 use dbt_schemas::schemas::dbt_column::DbtCoreBaseColumn;
@@ -18,12 +18,12 @@ use minijinja::{
 
 use dbt_schemas::schemas::dbt_column::DbtColumn;
 
-static LOG_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"([^(]+)(\([^)]+\))?").expect("A valid regex"));
+static LOG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([^(]+)(\([^)]+\))?").expect("A valid regex"));
 
 /// Matches a COLLATE clause such as `COLLATE 'en-ci'` (case-insensitive).
-static COLLATION_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)\s+COLLATE\s+'([^']+)'").expect("A valid regex"));
+static COLLATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\s+COLLATE\s+'([^']+)'").expect("A valid regex"));
 
 /// A struct representing a column type for use with static methods
 #[derive(Clone, Copy, Debug)]
