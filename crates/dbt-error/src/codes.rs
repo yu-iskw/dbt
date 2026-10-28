@@ -332,6 +332,12 @@ pub enum ErrorCode {
     IndexWriteFailed = 1659,
 
     // --------------------------------------------------------------------------------------------
+    // Schema cache
+    /// A schema cache row read from `target/` holds IPC bytes that do not deserialize. The row
+    /// is skipped, so its schema is fetched or computed again, as with a cold cache.
+    SchemaCacheEntryCorrupt = 1660,
+
+    // --------------------------------------------------------------------------------------------
     // CLI errors
     NoLongerSupportedOption = 1700,
     NotYetSupportedOption = 1701,
