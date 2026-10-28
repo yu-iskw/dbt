@@ -176,6 +176,7 @@ impl TaskRunner {
             &self.resolved_state.nodes.seeds,
             Arc::clone(&self.schema_store) as Arc<dyn SchemaStoreTrait>,
             Arc::clone(&self.data_store),
+            &self.adapter_store,
             Arc::clone(self.adapter.engine().type_ops()),
             &run_task_args.io.in_dir,
         )
