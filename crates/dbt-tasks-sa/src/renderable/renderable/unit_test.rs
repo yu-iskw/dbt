@@ -1952,8 +1952,7 @@ fn is_supported_type(adapter_type: AdapterType, ref_type: &DataType) -> bool {
             AdapterType::Bigquery => {
                 // Support Arrays and Structs for BigQuery
                 matches!(ref_type, DataType::List(_) | DataType::Struct(_))
-                    || BigqueryTyping::is_json(ref_type)
-                    || BigqueryTyping::is_geography(ref_type)
+                    || BigqueryTyping::is_distinct_type(ref_type)
             }
             AdapterType::Databricks => DatabricksTyping::is_timestamp_ntz(ref_type),
             AdapterType::DuckDB => {
@@ -2103,8 +2102,9 @@ mod bigquery {
             return Ok(literal);
         }
 
-        let formatted_type = type_ops
-            .get_original_sql_type_from_field(field)
+        let mut formatted_type = String::new();
+        type_ops
+            .format_field_as_cast_type(field, &mut formatted_type)
             .map_err(|e| {
                 fs_err!(
                     ErrorCode::InvalidConfig,
@@ -2187,16 +2187,22 @@ fn columns_to_formatted_types<'a>(
         .iter()
         .map(|f| {
             let mut formatted = String::new();
-            type_ops
-                .format_arrow_type_as_sql(f.data_type(), f.is_nullable(), &mut formatted)
-                .map_err(|e| {
-                    fs_err!(
-                        ErrorCode::InvalidConfig,
-                        "Failed to format type {:?}: {}",
-                        f.data_type(),
-                        e
-                    )
-                })?;
+            match type_ops.adapter_type() {
+                AdapterType::Bigquery => type_ops.format_field_as_cast_type(f, &mut formatted),
+                _ => type_ops.format_arrow_type_as_sql(
+                    f.data_type(),
+                    f.is_nullable(),
+                    &mut formatted,
+                ),
+            }
+            .map_err(|e| {
+                fs_err!(
+                    ErrorCode::InvalidConfig,
+                    "Failed to format type {:?}: {}",
+                    f.data_type(),
+                    e
+                )
+            })?;
             Ok((f.name(), f.data_type(), formatted))
         })
         .collect::<FsResult<Vec<_>>>()
@@ -3267,6 +3273,112 @@ mod tests {
     }
 
     #[test]
+    fn test_create_values_bigquery_preserves_original_relation_types() {
+        let type_ops = DefaultTypeOps::new(AdapterType::Bigquery);
+        let fields = [
+            ("event_timestamp", "TIMESTAMP"),
+            ("local_datetime", "DATETIME"),
+            ("event_id", "INT64"),
+            ("event_name", "STRING"),
+            ("amount", "NUMERIC(10, 2)"),
+            ("tag_ids", "ARRAY<INT64>"),
+            ("actor", "STRUCT<id INT64, name STRING>"),
+        ]
+        .into_iter()
+        .map(|(name, sql_type)| {
+            make_arrow_field(&type_ops, name.to_string(), sql_type, None, None).unwrap()
+        })
+        .collect::<Vec<_>>();
+        let schema = Arc::new(Schema::new(fields));
+        let rows: Vec<BTreeMap<String, YmlValue>> = dbt_yaml::from_str(
+            r#"
+- event_timestamp: '2026-01-01 00:00:00+00:00'
+  local_datetime: '2026-01-01 00:00:00'
+  event_id: 42
+  event_name: created
+  amount: '12.34'
+  tag_ids: [1, 2]
+  actor: {id: 7, name: alice}
+"#,
+        )
+        .unwrap();
+
+        let result = create_values(
+            &schema,
+            &rows,
+            AdapterType::Bigquery,
+            &type_ops,
+            None,
+            "events",
+            true,
+        )
+        .unwrap();
+
+        for expected in [
+            "CAST('2026-01-01 00:00:00+00:00' AS TIMESTAMP) AS event_timestamp",
+            "CAST('2026-01-01 00:00:00' AS DATETIME) AS local_datetime",
+            "CAST(42 AS INT64) AS event_id",
+            "CAST('created' AS STRING) AS event_name",
+            "CAST('12.34' AS NUMERIC) AS amount",
+            "CAST([CAST(1 AS INT64), CAST(2 AS INT64)] AS ARRAY<INT64>) AS tag_ids",
+            "CAST(STRUCT(CAST(7 AS INT64) AS id, CAST('alice' AS STRING) AS name) AS STRUCT<id INT64, name STRING>) AS actor",
+        ] {
+            assert_contains!(result, expected);
+        }
+    }
+
+    #[test]
+    fn test_create_values_bigquery_range_literals() {
+        let ops = DefaultTypeOps::new(AdapterType::Bigquery);
+        let schema = Arc::new(Schema::new(vec![
+            make_arrow_field(&ops, "period".to_string(), "RANGE<DATE>", None, None).unwrap(),
+        ]));
+        for (value, literal) in [
+            (YmlValue::null(), "NULL"),
+            (
+                YmlValue::string("[2026-01-01, 2026-02-01)".to_string()),
+                "'[2026-01-01, 2026-02-01)'",
+            ),
+        ] {
+            let rows = vec![BTreeMap::from([("period".to_string(), value)])];
+            let result = create_values(
+                &schema,
+                &rows,
+                AdapterType::Bigquery,
+                &ops,
+                None,
+                "fixture_input",
+                false,
+            )
+            .unwrap();
+            assert_contains!(result, &format!("CAST({literal} AS RANGE<DATE>) AS period"));
+        }
+    }
+
+    /// The original-SQL-type preference is BigQuery-only: other adapters keep
+    /// formatting from the Arrow type even when the metadata is present.
+    #[test]
+    fn test_columns_to_formatted_types_non_bigquery_uses_arrow_type() {
+        let type_ops = DefaultTypeOps::new(AdapterType::Snowflake);
+        let schema = Arc::new(Schema::new(vec![
+            make_arrow_field(&type_ops, "amount".to_string(), "NUMBER(10,2)", None, None).unwrap(),
+            make_arrow_field(&type_ops, "name".to_string(), "VARCHAR(16)", None, None).unwrap(),
+            make_arrow_field(&type_ops, "ts".to_string(), "TIMESTAMP_NTZ(9)", None, None).unwrap(),
+        ]));
+
+        let formatted: Vec<String> = columns_to_formatted_types(&schema, &type_ops)
+            .unwrap()
+            .into_iter()
+            .map(|(_, _, formatted)| formatted)
+            .collect();
+
+        assert_eq!(
+            formatted,
+            vec!["float8", "text", "timestamp without time zone"]
+        );
+    }
+
+    #[test]
     fn test_create_values_bigquery_preserves_inferred_logical_types() {
         let type_ops = DefaultTypeOps::new(AdapterType::Bigquery);
         let fields = [
@@ -3400,7 +3512,7 @@ mod tests {
             );
             assert_contains!(
                 result,
-                "CAST('2.12345678901234567890' AS BIGNUMERIC(30, 20)) AS amount"
+                "CAST('2.12345678901234567890' AS BIGNUMERIC) AS amount"
             );
             assert_contains!(
                 result,
