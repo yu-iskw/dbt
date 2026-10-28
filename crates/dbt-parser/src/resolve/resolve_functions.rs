@@ -33,16 +33,13 @@ use dbt_schemas::{
 use indexmap::IndexMap;
 use minijinja::MacroSpans;
 
-use crate::dbt_project_config::{
-    ProjectConfigResolver, RootProjectConfigs, disallow_plus_prefix_from_flags, init_project_config,
-};
+use crate::dbt_project_config::{ProjectConfigResolver, RootProjectConfigs};
 use crate::renderer::{RenderCtx, RenderCtxInner};
 use crate::resolve::resolve_utils::{
-    build_unrendered_config, extract_config_map, resolve_node_quoting, select_node_adapter,
+    RawProjectConfigsByAdapter, extract_config_map, resolve_node_quoting, select_node_adapter,
 };
 use crate::utils::{
-    RelationComponents, extract_resource_config_from_raw_project,
-    node_starting_database_and_schema, update_node_relation_components,
+    RelationComponents, node_starting_database_and_schema, update_node_relation_components,
 };
 use crate::{
     args::ResolveArgs,
@@ -95,27 +92,23 @@ pub async fn resolve_functions(
     let mut rendering_results: HashMap<String, (String, MacroSpans)> = HashMap::new();
     let dependency_package_name = dependency_package_name_from_ctx(&env, base_ctx);
 
-    let config_resolver = ProjectConfigResolver::build(
+    let config_resolver = ProjectConfigResolver::per_adapter(
         root_project_configs.functions.clone(),
-        dependency_package_name.is_some(),
-        || {
-            init_project_config(
-                &package.dbt_project.functions,
-                DbtQuoting::default(),
-                dependency_package_name,
-                disallow_plus_prefix_from_flags(root_package.dbt_project.flags.as_ref()),
-                default_adapter,
-            )
-        },
+        |root| &root.functions,
+        root_project_configs,
+        &package.dbt_project.functions,
+        dependency_package_name,
+        arg.unconfigured_static_analysis(),
         default_adapter,
-    )?
-    .with_resolve_defaults(arg.unconfigured_static_analysis());
+        arg.adapter_override,
+    )?;
 
     let render_ctx = RenderCtx {
         inner: Arc::new(RenderCtxInner {
             args: arg.clone(),
             root_project_name: root_package.dbt_project.name.clone(),
             config_resolver,
+            adapter_hint: None,
             package_quoting,
             uses_snapshot_fqn: false,
             defer_render_errors_to_compile: false,
@@ -143,20 +136,12 @@ pub async fn resolve_functions(
     // prerequisite — the Stage-1 wholesale comparison requires a fully populated
     // `unrendered_config`).
     let is_dependency = dependency_package_name.is_some();
-    let raw_local_project_config = extract_resource_config_from_raw_project(
+    let mut raw_project_configs_by_adapter = RawProjectConfigsByAdapter::new(
         &package.raw_project_yml,
+        is_dependency.then_some(&root_package.raw_project_yml),
         "functions",
         default_adapter,
     )?;
-    let raw_root_project_functions_cfg = if is_dependency {
-        Some(extract_resource_config_from_raw_project(
-            &root_package.raw_project_yml,
-            "functions",
-            default_adapter,
-        )?)
-    } else {
-        None
-    };
 
     // Snapshot raw schema.yml `config:` blocks before render_unresolved_sql_files nulls out
     // schema_value entries via std::mem::replace. Keyed by function name.
@@ -239,6 +224,8 @@ pub async fn resolve_functions(
         asset: dbt_asset,
         sql_file_info,
         config: mut model_config,
+        adapter,
+        alias_adapter,
         raw_code,
         rendered_sql,
         macro_spans,
@@ -308,9 +295,8 @@ pub async fn resolve_functions(
         // See `resolve_models`: the flag overrides the config. A function selects
         // explicitly; it has no attached node to inherit from.
         let selected_adapter = select_node_adapter(
-            arg,
             model_config.adapter,
-            None,
+            adapter,
             default_adapter,
             &dbt_asset.path,
         )?;
@@ -349,14 +335,12 @@ pub async fn resolve_functions(
         // Merge the four raw sources (project < root < schema.yml < inline) into the node's
         // `unrendered_config`. Functions do not support pre_hook/post_hook, so hook-name
         // normalization is disabled.
-        let unrendered_config = build_unrendered_config(
+        let unrendered_config = raw_project_configs_by_adapter.unrendered_config(
+            alias_adapter,
             &fqn,
-            &raw_local_project_config,
-            raw_root_project_functions_cfg.as_ref(),
             raw_schema_yml_configs.get(function_name),
             raw_config_call_dict.as_ref(),
             false,
-            default_adapter,
         )?;
 
         let properties = if let Some(properties) = maybe_properties {

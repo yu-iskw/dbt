@@ -33,7 +33,7 @@ use crate::schemas::manifest::GrantAccessToTarget;
 use crate::schemas::project::ResolvableConfig;
 use crate::schemas::project::TypedRecursiveConfig;
 use crate::schemas::project::configs::common::{
-    WarehouseSpecificNodeConfig, take_databricks_catalog_alias,
+    TYPED_ALIAS_KEYS, WarehouseSpecificNodeConfig, take_databricks_catalog_alias,
 };
 use crate::schemas::project::configs::config_merge::{Tags, TblProperties};
 use crate::schemas::properties::ModelState;
@@ -1052,6 +1052,10 @@ impl ResolvableConfig<SnapshotConfig> for SnapshotConfig {
         self.enabled
     }
 
+    fn get_adapter(&self) -> Option<AdapterType> {
+        self.adapter
+    }
+
     fn disable(&mut self) {
         self.enabled = Some(false);
     }
@@ -1082,9 +1086,13 @@ impl ResolvableConfig<SnapshotConfig> for SnapshotConfig {
         self.default_to_fields(parent);
     }
 
-    fn canonicalize_adapter_aliases(&mut self, default_adapter: AdapterType) {
+    fn typed_alias_keys() -> &'static [&'static str] {
+        TYPED_ALIAS_KEYS
+    }
+
+    fn canonicalize_adapter_aliases(&mut self, alias_adapter: AdapterType) {
         if let Some(catalog) = take_databricks_catalog_alias(
-            default_adapter,
+            alias_adapter,
             &mut self.__warehouse_specific_config__,
             self.database.is_some(),
         ) {

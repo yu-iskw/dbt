@@ -93,6 +93,7 @@ pub async fn resolve_analyses(
             args: arg.clone(),
             root_project_name: root_package.dbt_project.name.clone(),
             config_resolver,
+            adapter_hint: None,
             package_quoting,
             uses_snapshot_fqn: false,
             defer_render_errors_to_compile: true,
@@ -166,11 +167,10 @@ pub async fn resolve_analyses(
         let unique_id = get_unique_id(analysis_name, package_name, None, "analysis");
         // An analysis is compiled rather than materialized, but it still renders
         // refs and dispatches macros, so which adapter it renders *as* is a real
-        // choice. Resolved the same way every other node type resolves it.
+        // choice. The resolver does not read an analysis's `+adapter`, so it is picked here.
         let selected_adapter = select_node_adapter(
-            arg,
             analysis_config.adapter,
-            None,
+            arg.adapter_override.or(analysis_config.adapter),
             default_adapter,
             &dbt_asset.path,
         )?;

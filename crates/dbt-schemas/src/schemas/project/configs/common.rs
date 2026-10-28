@@ -456,6 +456,9 @@ impl ResolvedConfig for WarehouseSpecificNodeConfig {
     }
 }
 
+/// The aliases [`take_databricks_catalog_alias`] translates, for a config type that calls it.
+pub const TYPED_ALIAS_KEYS: &[&str] = &["catalog"];
+
 /// Takes the Databricks `catalog` alias value out of `warehouse_specific`, for the caller to
 /// move into its own `database` field -- mirroring dbt-core's `Credentials._ALIASES`
 /// (`catalog` -> `database`, `dbt/adapters/databricks/credentials.py:69-72`). `None` on every

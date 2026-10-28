@@ -5,7 +5,7 @@ use dbt_adapter_core::AdapterType;
 use dbt_common::FsError;
 use dbt_common::cancellation::CancellationToken;
 use dbt_common::constants::DBT_GENERIC_TESTS_DIR_NAME;
-use dbt_common::io_args::FsCommand;
+use dbt_common::io_args::{FsCommand, multi_adapter_enabled};
 use dbt_common::once_cell_vars::DISPATCH_CONFIG;
 use dbt_common::path::DbtPath;
 use dbt_common::stdfs;
@@ -233,6 +233,8 @@ pub async fn resolve(
         dbt_state.root_project(),
         &dbt_state.dbt_profile.adapters,
         dbt_state.dbt_profile.default_adapter,
+        // Read the flag only when it can matter: it warns on a malformed value at every read.
+        dbt_state.dbt_profile.adapters.len() > 1 && multi_adapter_enabled(),
     )?;
     let root_project_configs = Arc::new(root_project_configs);
     // Process packages in topological order

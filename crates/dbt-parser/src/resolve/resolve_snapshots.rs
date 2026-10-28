@@ -1,8 +1,7 @@
 use super::resolve_properties::MinimalPropertiesEntry;
 use crate::args::ResolveArgs;
 use crate::dbt_project_config::{
-    ProjectConfigResolver, RootProjectConfigs, disallow_plus_prefix_from_flags,
-    init_project_config, strip_resource_paths_from_ref_path,
+    ProjectConfigResolver, RootProjectConfigs, strip_resource_paths_from_ref_path,
 };
 use crate::renderer::{
     RenderCtx, RenderCtxInner, SqlFileRenderResult, collect_adapter_identifiers_detect_unsafe,
@@ -13,14 +12,14 @@ use crate::resolve::resolve_tests::persist_generic_data_tests::{
     TestUnrenderedConfigs, extract_test_unrendered_configs,
 };
 use crate::resolve::resolve_utils::{
-    build_unrendered_config, err_resource_name_has_spaces, extract_config_map,
+    RawProjectConfigsByAdapter, err_resource_name_has_spaces, extract_config_map,
     resolve_node_quoting, select_node_adapter, validate_compute,
 };
 use crate::resolve::yaml_field_utils;
 use crate::sql_file_info::SqlFileInfo;
 use crate::utils::{
-    RelationComponents, extract_resource_config_from_raw_project, get_original_file_path,
-    get_snapshot_fqn, parse_unrendered_config, update_node_relation_components,
+    RelationComponents, get_original_file_path, get_snapshot_fqn, parse_unrendered_config,
+    update_node_relation_components,
 };
 use crate::validation::check_node_static_analysis;
 use dbt_adapter_core::AdapterType;
@@ -103,20 +102,12 @@ pub async fn resolve_snapshots(
     };
 
     let is_dependency = dependency_package_name.is_some();
-    let raw_local_project_config = extract_resource_config_from_raw_project(
+    let mut raw_project_configs_by_adapter = RawProjectConfigsByAdapter::new(
         &package.raw_project_yml,
+        is_dependency.then_some(&root_package.raw_project_yml),
         "snapshots",
         default_adapter,
     )?;
-    let raw_root_project_cfg = if is_dependency {
-        Some(extract_resource_config_from_raw_project(
-            &root_package.raw_project_yml,
-            "snapshots",
-            default_adapter,
-        )?)
-    } else {
-        None
-    };
 
     let package_name = package.dbt_project.name.to_owned();
 
@@ -296,30 +287,26 @@ pub async fn resolve_snapshots(
         }
     }
 
-    let config_resolver = ProjectConfigResolver::build(
+    let config_resolver = ProjectConfigResolver::per_adapter(
         root_project_configs.snapshots.clone(),
-        is_dependency,
-        || {
-            init_project_config(
-                &package.dbt_project.snapshots,
-                DbtQuoting::default(),
-                dependency_package_name,
-                disallow_plus_prefix_from_flags(root_package.dbt_project.flags.as_ref()),
-                default_adapter,
-            )
-        },
+        |root| &root.snapshots,
+        root_project_configs,
+        &package.dbt_project.snapshots,
+        dependency_package_name,
+        (
+            arg.unconfigured_static_analysis(),
+            root_package.dbt_project.sync.clone(),
+        ),
         default_adapter,
-    )?
-    .with_resolve_defaults((
-        arg.unconfigured_static_analysis(),
-        root_package.dbt_project.sync.clone(),
-    ));
+        arg.adapter_override,
+    )?;
 
     let render_ctx = RenderCtx {
         inner: Arc::new(RenderCtxInner {
             args: arg.clone(),
             root_project_name: root_package.dbt_project.name.clone(),
             config_resolver,
+            adapter_hint: None,
             package_quoting,
             uses_snapshot_fqn: true,
             defer_render_errors_to_compile: true,
@@ -371,6 +358,8 @@ pub async fn resolve_snapshots(
         asset: dbt_asset,
         sql_file_info,
         config: mut snapshot_config,
+        adapter,
+        alias_adapter,
         raw_code,
         macro_spans: _macro_spans,
         properties: maybe_properties,
@@ -450,9 +439,8 @@ pub async fn resolve_snapshots(
             // See `resolve_models`: the flag overrides the config. A snapshot
             // selects explicitly -- it has no attached node to inherit from.
             let selected_adapter = select_node_adapter(
-                arg,
                 snapshot_config.adapter,
-                None,
+                adapter,
                 default_adapter,
                 error_path,
             )?;
@@ -509,14 +497,12 @@ pub async fn resolve_snapshots(
                     (None, None)
                 };
 
-            let unrendered_config = build_unrendered_config(
+            let unrendered_config = raw_project_configs_by_adapter.unrendered_config(
+                alias_adapter,
                 &fqn,
-                &raw_local_project_config,
-                raw_root_project_cfg.as_ref(),
                 raw_schema_yml_configs.get(snapshot_name),
                 raw_inline_config.as_ref(),
                 true,
-                default_adapter,
             )?;
 
             // Create initial snapshot with default values
