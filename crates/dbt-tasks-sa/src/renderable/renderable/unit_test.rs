@@ -522,13 +522,13 @@ fn column_sql_type(column: &Column) -> Cow<'_, str> {
 
 fn columns_to_schema(
     type_ops: &dyn TypeOps,
-    columns: Vec<Column>,
+    columns: &[Arc<Column>],
     unique_id: &str,
 ) -> FsResult<SchemaRef> {
     let mut fields = Vec::with_capacity(columns.len());
 
     for column in columns {
-        let sql_type_str = column_sql_type(&column);
+        let sql_type_str = column_sql_type(column.as_ref());
 
         let field = make_arrow_field(
             type_ops,
@@ -822,7 +822,7 @@ fn infer_unit_test_expected_schema(
             )
         })?;
 
-        let columns = Column::vec_from_jinja_value(unit_test.node_adapter(), columns_as_value)
+        let columns = Column::vec_from_jinja_value(unit_test.node_adapter(), &columns_as_value)
             .map_err(|e| {
                 fs_err!(
                     ErrorCode::Generic,
@@ -834,7 +834,7 @@ fn infer_unit_test_expected_schema(
 
         columns_to_schema(
             adapter.engine().type_ops().as_ref(),
-            columns,
+            &columns,
             &unit_test.__common_attr__.unique_id,
         )
     };
@@ -4467,11 +4467,11 @@ mod tests {
         for (precision, scale) in [(11, 4), (38, 0), (38, 37), (4, 4)] {
             let data_type = DataType::Decimal128(precision, scale);
             let field = Arc::new(Field::new("AMOUNT", data_type.clone(), true));
-            let column = builder.build(&field, &type_ops).unwrap();
+            let column = Arc::new(builder.build(&field, &type_ops).unwrap());
             assert_eq!(column.original_sql_str(), Some("NUMBER"));
             assert_eq!(column.data_type(), format!("NUMBER({precision},{scale})"));
 
-            let schema = columns_to_schema(&type_ops, vec![column], "unit_test.decimal").unwrap();
+            let schema = columns_to_schema(&type_ops, &[column], "unit_test.decimal").unwrap();
             assert_eq!(schema.field(0).data_type(), &data_type);
             assert_eq!(
                 type_ops

@@ -18,6 +18,8 @@ use minijinja::{
 
 use dbt_schemas::schemas::dbt_column::DbtColumn;
 
+use crate::value::columns_to_value;
+
 static LOG_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([^(]+)(\([^)]+\))?").expect("A valid regex"));
 
@@ -85,7 +87,7 @@ impl Object for ColumnStatic {
                 // TODO: ArgsIter
                 let mut args = ArgParser::new(args, None);
                 let columns = args.get::<Value>("columns")?;
-                let columns = Column::vec_from_jinja_value(AdapterType::Databricks, columns)?;
+                let columns = Column::vec_from_jinja_value(AdapterType::Databricks, &columns)?;
 
                 Ok(Value::from(self.dbx_format_add_column_list(&columns)?))
             }
@@ -93,7 +95,7 @@ impl Object for ColumnStatic {
                 // TODO: ArgsIter
                 let mut args = ArgParser::new(args, None);
                 let columns = args.get::<Value>("columns")?;
-                let columns = Column::vec_from_jinja_value(AdapterType::Databricks, columns)?;
+                let columns = Column::vec_from_jinja_value(AdapterType::Databricks, &columns)?;
 
                 Ok(Value::from(self.dbx_format_remove_column_list(&columns)?))
             }
@@ -309,7 +311,7 @@ impl ColumnStatic {
     /// https://github.com/databricks/dbt-databricks/blob/822b105b15e644676d9e1f47cbfd765cd4c1541f/dbt/adapters/databricks/column.py#L66
     fn dbx_format_add_column_list(
         self: &Arc<Self>,
-        columns: &[Column],
+        columns: &[Arc<Column>],
     ) -> Result<String, minijinja::Error> {
         if self.0 != AdapterType::Databricks {
             unimplemented!("Only available for Databricks")
@@ -325,7 +327,7 @@ impl ColumnStatic {
     /// https://github.com/databricks/dbt-databricks/blob/822b105b15e644676d9e1f47cbfd765cd4c1541f/dbt/adapters/databricks/column.py#L62
     fn dbx_format_remove_column_list(
         self: &Arc<Self>,
-        columns: &[Column],
+        columns: &[Arc<Column>],
     ) -> Result<String, minijinja::Error> {
         if self.0 != AdapterType::Databricks {
             unimplemented!("Only available for Databricks")
@@ -333,7 +335,7 @@ impl ColumnStatic {
 
         Ok(columns
             .iter()
-            .map(|c| c.quoted().as_str().to_owned())
+            .map(|c| c.quoted())
             .collect::<Vec<String>>()
             .join(", "))
     }
@@ -640,13 +642,13 @@ impl Column {
 
     pub fn vec_from_jinja_value(
         _adapter_type: AdapterType,
-        value: Value,
-    ) -> Result<Vec<Self>, minijinja::Error> {
+        value: &Value,
+    ) -> Result<Vec<Arc<Column>>, minijinja::Error> {
         // Iterate over the jinja value which should be a sequence
         value
             .try_iter()?
             .map(|item| {
-                item.downcast_object_ref::<Self>().cloned().ok_or_else(|| {
+                item.downcast_object::<Self>().ok_or_else(|| {
                     minijinja::Error::new(
                         minijinja::ErrorKind::InvalidOperation,
                         "Failed to downcast jinja value to Column; expected Column object",
@@ -662,7 +664,7 @@ impl Column {
     pub fn new_bigquery(
         name: String,
         original_sql_str: String,
-        fields: impl Into<Vec<Self>>,
+        fields: impl IntoIterator<Item = Arc<Column>>,
         mode: BigqueryColumnMode,
     ) -> Self {
         use BigqueryColumnMode::*;
@@ -673,11 +675,13 @@ impl Column {
         };
         let (core_dtype, core_data_type) =
             Self::make_degenerate_types(AdapterType::Bigquery, &original_sql_str);
+        // TODO: change _fields to be Vec<Arc<Column>> to avoid this transformation
+        let fields = fields.into_iter().map(Arc::unwrap_or_clone).collect();
         Self {
             _adapter_type: AdapterType::Bigquery,
             _nullable: nullable,
             _repeated: repeated,
-            _fields: fields.into(),
+            _fields: fields,
             original_sql_str: Some(original_sql_str),
             name,
             comment: None,
@@ -1171,7 +1175,7 @@ impl Column {
                 })?)
     }
 
-    fn _bq_flatten_inner(&self, prefix: &str) -> Vec<Self> {
+    fn _bq_flatten_inner(&self, prefix: &str) -> Vec<Arc<Self>> {
         let new_prefix = if prefix.is_empty() {
             self.name.clone()
         } else {
@@ -1185,12 +1189,9 @@ impl Column {
         };
 
         if self._fields.is_empty() {
-            Vec::from([Self::new_bigquery(
-                new_prefix,
-                original_sql_str,
-                &[],
-                self.mode(),
-            )])
+            // XXX: change new_bigquery to return a Box<Self>
+            let column = Self::new_bigquery(new_prefix, original_sql_str, [], self.mode());
+            Vec::from([Arc::new(column)])
         } else {
             let mut new_fields = Vec::new();
             for f in &self._fields {
@@ -1202,7 +1203,7 @@ impl Column {
     }
 
     /// https://github.com/dbt-labs/dbt-adapters/blob/c16cc7047e8678f8bb88ae294f43da2c68e9f5cc/dbt-bigquery/src/dbt/adapters/bigquery/column.py#L69
-    pub fn flatten(&self) -> Vec<Self> {
+    pub fn flatten(&self) -> Vec<Arc<Self>> {
         if !matches!(self._adapter_type, AdapterType::Bigquery) {
             unimplemented!("'flatten' is only implemented for Bigquery")
         }
@@ -1241,7 +1242,7 @@ impl Object for Column {
                 Ok(Value::from(self.can_expand_to(&other)?))
             }
             // Bigquery only
-            "flatten" => Ok(Value::from(self.flatten())),
+            "flatten" => Ok(columns_to_value(self.flatten())),
             // Databricks/Spark only - render column DDL for CREATE TABLE
             "render_for_create" => Ok(Value::from(self.render_for_create())),
 
@@ -1579,12 +1580,12 @@ mod tests {
 
     #[test]
     fn test_bq_flatten() {
-        let simple = Column::new_bigquery(
+        let simple = Arc::new(Column::new_bigquery(
             "col".to_string(),
             "NUMBER".to_string(),
-            &[],
+            [],
             BigqueryColumnMode::Nullable,
-        );
+        ));
         assert!(
             simple
                 .flatten()
@@ -1593,7 +1594,7 @@ mod tests {
                     [Column::new_bigquery(
                         "col".to_string(),
                         "NUMBER".to_string(),
-                        &[],
+                        [],
                         BigqueryColumnMode::Nullable
                     )]
                     .iter()
@@ -1604,7 +1605,7 @@ mod tests {
         let nested = Column::new_bigquery(
             "parent".to_string(),
             "STRUCT<NUMBER col>".to_string(),
-            &[simple],
+            [simple],
             BigqueryColumnMode::Nullable,
         );
         assert!(
@@ -1615,7 +1616,7 @@ mod tests {
                     [Column::new_bigquery(
                         "parent.col".to_string(),
                         "NUMBER".to_string(),
-                        &[],
+                        [],
                         BigqueryColumnMode::Nullable
                     ),]
                     .iter()
@@ -1626,7 +1627,7 @@ mod tests {
         let deeply_nested = Column::new_bigquery(
             "grandpa".to_string(),
             "STRUCT<NUMBER col>".to_string(),
-            &[nested],
+            [Arc::new(nested)],
             BigqueryColumnMode::Nullable,
         );
         assert!(
@@ -1637,7 +1638,7 @@ mod tests {
                     [Column::new_bigquery(
                         "grandpa.parent.col".to_string(),
                         "NUMBER".to_string(),
-                        &[],
+                        [],
                         BigqueryColumnMode::Nullable
                     ),]
                     .iter()
@@ -1648,19 +1649,19 @@ mod tests {
         let nested_with_siblings = Column::new_bigquery(
             "parent".to_string(),
             "STRUCT<NUMBER a, BOOLEAN b>".to_string(),
-            &[
-                Column::new_bigquery(
+            [
+                Arc::new(Column::new_bigquery(
                     "a".to_string(),
                     "NUMBER".to_string(),
-                    &[],
+                    [],
                     BigqueryColumnMode::Nullable,
-                ),
-                Column::new_bigquery(
+                )),
+                Arc::new(Column::new_bigquery(
                     "b".to_string(),
                     "BOOLEAN".to_string(),
-                    &[],
+                    [],
                     BigqueryColumnMode::Nullable,
-                ),
+                )),
             ],
             BigqueryColumnMode::Nullable,
         );
@@ -1673,13 +1674,13 @@ mod tests {
                         Column::new_bigquery(
                             "parent.a".to_string(),
                             "NUMBER".to_string(),
-                            &[],
+                            [],
                             BigqueryColumnMode::Nullable
                         ),
                         Column::new_bigquery(
                             "parent.b".to_string(),
                             "BOOLEAN".to_string(),
-                            &[],
+                            [],
                             BigqueryColumnMode::Nullable
                         )
                     ]
@@ -1694,26 +1695,26 @@ mod tests {
         let city = Column::new_bigquery(
             "city".to_string(),
             "STRING".to_string(),
-            &[],
+            [],
             BigqueryColumnMode::Nullable,
         );
 
         let coords = Column::new_bigquery(
             "coords".to_string(),
             "STRUCT".to_string(),
-            &[
-                Column::new_bigquery(
+            [
+                Arc::new(Column::new_bigquery(
                     "lat".to_string(),
                     "FLOAT64".to_string(),
-                    &[],
+                    [],
                     BigqueryColumnMode::Nullable,
-                ),
-                Column::new_bigquery(
+                )),
+                Arc::new(Column::new_bigquery(
                     "lon".to_string(),
                     "FLOAT64".to_string(),
-                    &[],
+                    [],
                     BigqueryColumnMode::Nullable,
-                ),
+                )),
             ],
             BigqueryColumnMode::Nullable,
         );
@@ -1721,7 +1722,7 @@ mod tests {
         let location = Column::new_bigquery(
             "location_entity".to_string(),
             "STRUCT".to_string(),
-            &[city, coords],
+            [Arc::new(city), Arc::new(coords)],
             BigqueryColumnMode::Nullable,
         );
 
@@ -1736,14 +1737,14 @@ mod tests {
         let authors = Column::new_bigquery(
             "authors".to_string(),
             "STRING".to_string(),
-            &[],
+            [],
             BigqueryColumnMode::Repeated,
         );
 
         let content = Column::new_bigquery(
             "content_entity".to_string(),
             "STRUCT".to_string(),
-            &[authors],
+            [Arc::new(authors)],
             BigqueryColumnMode::Nullable,
         );
 
